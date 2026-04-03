@@ -39,25 +39,26 @@ struct DashboardView: View {
     private let recoveryScore = 88
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            bgPrimary.ignoresSafeArea()
-
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 16) {
-                    topBar
-                    recoveryRing
-                    aiInsightCard
-                    metricsRow
-                    hrvTrendCard
-                    nextPhaseCard
-                    Spacer(minLength: 90)
+        bgPrimary
+            .ignoresSafeArea()
+            .overlay(
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 16) {
+                        topBar
+                        recoveryRing
+                        aiInsightCard
+                        metricsRow
+                        hrvTrendCard
+                        nextPhaseCard
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+            )
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                bottomNavBar
             }
-
-            bottomNavBar
-        }
     }
 
     // MARK: Top bar
@@ -347,7 +348,6 @@ struct DashboardView: View {
             }
         }
         .padding(.vertical, 12)
-        .padding(.bottom, 8)
         .background(
             bgCard
                 .overlay(
@@ -356,6 +356,7 @@ struct DashboardView: View {
                         .frame(height: 1),
                     alignment: .top
                 )
+                .ignoresSafeArea(edges: .bottom)
         )
     }
 }
