@@ -8,45 +8,30 @@
 import SwiftUI
 import SwiftData
 
+enum AppScreen {
+    case welcome, dashboard
+}
+
 struct ContentView: View {
-    @State private var showWelcome   = true
-    @State private var showCheckIn   = false
+    @State private var screen: AppScreen = .welcome
 
     var body: some View {
         ZStack {
-            if showWelcome {
+            switch screen {
+            case .welcome:
                 WelcomeView(
                     onGetStarted: {
-                        withAnimation(.easeInOut(duration: 0.5)) { showWelcome = false }
+                        withAnimation(.easeInOut(duration: 0.5)) { screen = .dashboard }
                     },
                     onSignIn: {
-                        withAnimation(.easeInOut(duration: 0.5)) { showWelcome = false }
+                        withAnimation(.easeInOut(duration: 0.5)) { screen = .dashboard }
                     }
                 )
                 .transition(.opacity)
-            } else {
-                NavigationStack {
-                    VStack(spacing: 24) {
-                        Text("RecoveryOS")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
 
-                        Button(action: { showCheckIn = true }) {
-                            Label("Log Check-In", systemImage: "plus.circle.fill")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(.teal)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                        .padding(.horizontal)
-                    }
-                    .sheet(isPresented: $showCheckIn) {
-                        CheckInView()
-                    }
-                }
-                .transition(.opacity)
+            case .dashboard:
+                DashboardView()
+                    .transition(.opacity)
             }
         }
     }
