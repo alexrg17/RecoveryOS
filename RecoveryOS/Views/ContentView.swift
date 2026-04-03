@@ -8,23 +8,47 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - App screens
+enum AppScreen {
+    case welcome, login, signUp, main
+}
+
 struct ContentView: View {
-    @State private var showWelcome   = true
-    @State private var showCheckIn   = false
+    @State private var screen: AppScreen = .welcome
+    @State private var showCheckIn       = false
 
     var body: some View {
         ZStack {
-            if showWelcome {
+            switch screen {
+
+            case .welcome:
                 WelcomeView(
-                    onGetStarted: {
-                        withAnimation(.easeInOut(duration: 0.5)) { showWelcome = false }
-                    },
-                    onSignIn: {
-                        withAnimation(.easeInOut(duration: 0.5)) { showWelcome = false }
-                    }
+                    onGetStarted: { transition(to: .signUp) },
+                    onSignIn:     { transition(to: .login)  }
                 )
                 .transition(.opacity)
-            } else {
+
+            case .login:
+                LoginView(
+                    onSignedIn:      { transition(to: .main)    },
+                    onCreateAccount: { transition(to: .signUp)  }
+                )
+                .transition(.asymmetric(
+                    insertion:  .move(edge: .trailing).combined(with: .opacity),
+                    removal:    .move(edge: .leading).combined(with: .opacity)
+                ))
+
+            case .signUp:
+                SignUpView(
+                    onAccountCreated: { transition(to: .main)   },
+                    onSignIn:         { transition(to: .login)  }
+                )
+                .transition(.asymmetric(
+                    insertion:  .move(edge: .trailing).combined(with: .opacity),
+                    removal:    .move(edge: .leading).combined(with: .opacity)
+                ))
+
+            case .main:
                 NavigationStack {
                     VStack(spacing: 24) {
                         Text("RecoveryOS")
@@ -49,6 +73,11 @@ struct ContentView: View {
                 .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.4), value: screen)
+    }
+
+    private func transition(to next: AppScreen) {
+        withAnimation(.easeInOut(duration: 0.4)) { screen = next }
     }
 }
 
