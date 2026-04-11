@@ -10,7 +10,7 @@ import SwiftData
 
 // MARK: - App screens
 enum AppScreen {
-    case welcome, login, signUp, onboarding, dashboard
+    case welcome, login, signUp, onboarding, healthSync, dashboard, settings
 }
 
 struct ContentView: View {
@@ -48,15 +48,32 @@ struct ContentView: View {
                 ))
 
             case .onboarding:
-                OnboardingView(onFinished: { transition(to: .dashboard) })
+                OnboardingView(onFinished: { transition(to: .healthSync) })
                     .transition(.asymmetric(
                         insertion:  .move(edge: .trailing).combined(with: .opacity),
                         removal:    .move(edge: .leading).combined(with: .opacity)
                     ))
 
+            case .healthSync:
+                HealthSyncView(
+                    onSynced:   { transition(to: .dashboard) },
+                    onSkipped:  { transition(to: .dashboard) }
+                )
+                .transition(.asymmetric(
+                    insertion:  .move(edge: .trailing).combined(with: .opacity),
+                    removal:    .move(edge: .leading).combined(with: .opacity)
+                ))
+
             case .dashboard:
-                DashboardView()
+                DashboardView(onProfileTapped: { transition(to: .settings) })
                     .transition(.opacity)
+
+            case .settings:
+                SettingsView(onBack: { transition(to: .dashboard) })
+                    .transition(.asymmetric(
+                        insertion:  .move(edge: .trailing).combined(with: .opacity),
+                        removal:    .move(edge: .leading).combined(with: .opacity)
+                    ))
             }
         }
         .animation(.easeInOut(duration: 0.4), value: screen)

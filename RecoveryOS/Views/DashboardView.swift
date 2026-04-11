@@ -35,6 +35,7 @@ private enum TabItem: String, CaseIterable {
 
 // MARK: - Dashboard
 struct DashboardView: View {
+    var onProfileTapped: (() -> Void)? = nil
     @State private var selectedTab: TabItem = .home
     private let recoveryScore = 88
 
@@ -332,7 +333,8 @@ struct DashboardView: View {
         HStack(spacing: 0) {
             ForEach(TabItem.allCases, id: \.self) { tab in
                 Button {
-                    selectedTab = tab
+                    if tab == .profile { onProfileTapped?() }
+                    else { selectedTab = tab }
                 } label: {
                     VStack(spacing: 4) {
                         Image(systemName: tab.icon)
