@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 // MARK: - Colours
 private let bgPrimary   = Color(red: 0.04, green: 0.04, blue: 0.07)
@@ -157,7 +158,8 @@ struct DashboardView: View {
                 SettingsView(onSignedOut: { onSignedOut?() }).transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: selectedTab)
+        .animation(.easeInOut(duration: 0.25), value: selectedTab)
+        .simultaneousGesture(swipeTabGesture)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             bottomNavBar
         }
@@ -191,6 +193,26 @@ struct DashboardView: View {
                 displayedScore = Int(Double(target) * Double(i) / Double(steps))
             }
         }
+    }
+
+    // MARK: - Swipe gesture (left/right to change tab)
+    private var swipeTabGesture: some Gesture {
+        DragGesture(minimumDistance: 30)
+            .onEnded { value in
+                let h = value.translation.width
+                let v = value.translation.height
+                // Only act on primarily horizontal swipes
+                guard abs(h) > abs(v) * 1.5, abs(h) > 50 else { return }
+                let tabs = TabItem.allCases
+                guard let index = tabs.firstIndex(of: selectedTab) else { return }
+                if h < 0, index < tabs.count - 1 {
+                    selectedTab = tabs[index + 1]
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                } else if h > 0, index > 0 {
+                    selectedTab = tabs[index - 1]
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }
+            }
     }
 
     // MARK: - Home content
@@ -329,6 +351,22 @@ struct DashboardView: View {
         }
         .frame(width: 210, height: 210)
         .padding(.vertical, 8)
+        .onTapGesture(count: 2) {
+            triggerAnimation()
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        }
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = "\(recoveryScore)/100"
+            } label: {
+                Label("Copy Score", systemImage: "doc.on.doc")
+            }
+            Button {
+                UIPasteboard.general.string = "My RecoveryOS readiness score today: \(recoveryScore)/100 (\(recoveryStatus))"
+            } label: {
+                Label("Share Progress", systemImage: "square.and.arrow.up")
+            }
+        }
     }
 
     // MARK: AI insight card

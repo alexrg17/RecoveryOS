@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct CheckInView: View {
     @Environment(\.modelContext) private var modelContext
@@ -138,6 +139,16 @@ struct CheckInView: View {
             }
             Slider(value: value, in: 1...10, step: 1)
                 .tint(sliderColor(value: value.wrappedValue, invert: invert))
+                .gesture(
+                    DragGesture(minimumDistance: 10)
+                        .onEnded { v in
+                            // Swipe down on a slider resets it to 5
+                            if v.translation.height > 30, abs(v.translation.height) > abs(v.translation.width) {
+                                value.wrappedValue = 5
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }
+                        }
+                )
         }
     }
 
