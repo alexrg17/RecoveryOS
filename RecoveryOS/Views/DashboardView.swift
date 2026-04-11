@@ -40,7 +40,9 @@ struct DashboardView: View {
 
     @Query(sort: \DailyCheckIn.date, order: .reverse) private var checkIns: [DailyCheckIn]
     @State private var selectedTab: TabItem = .home
-    @State private var showCheckIn = false
+    @State private var showCheckIn            = false
+    @State private var showNotificationPicker = false
+    @State private var notificationSent: NotificationManager.DemoNotification? = nil
 
     // Ring + score animation
     @State private var ringProgress: Double = 0
@@ -162,6 +164,9 @@ struct DashboardView: View {
         .sheet(isPresented: $showCheckIn) {
             CheckInView()
         }
+        .sheet(isPresented: $showNotificationPicker) {
+            NotificationPickerView(sentNotification: $notificationSent)
+        }
         .onAppear { triggerAnimation() }
         .onChange(of: checkIns.first?.readinessScore) { _, _ in triggerAnimation() }
     }
@@ -237,6 +242,13 @@ struct DashboardView: View {
                 .foregroundStyle(.white)
 
             Spacer()
+
+            Button { showNotificationPicker = true } label: {
+                Image(systemName: "bell")
+                    .font(.system(size: 20))
+                    .foregroundStyle(accentTeal)
+                    .frame(width: 44, height: 44)
+            }
 
             Button { showCheckIn = true } label: {
                 Image(systemName: "plus.circle")

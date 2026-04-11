@@ -394,6 +394,11 @@ struct HealthSyncView: View {
             profile.onboardingCompleted = true
         }
         hasCompletedOnboarding = true
+
+        // Request notification permission and schedule daily 8am check-in reminder
+        NotificationManager.shared.requestPermission()
+        NotificationManager.shared.scheduleDailyCheckInReminder()
+
         callback()
     }
 
