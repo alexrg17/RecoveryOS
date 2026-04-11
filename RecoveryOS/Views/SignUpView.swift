@@ -6,11 +6,15 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct SignUpView: View {
 
     var onAccountCreated: () -> Void
     var onSignIn: () -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @AppStorage("isLoggedIn") private var isLoggedIn = false
 
     // Fields
     @State private var fullName         = ""
@@ -403,6 +407,9 @@ struct SignUpView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
             isLoading    = false
             spinnerAngle = 0
+            let profile  = UserProfile(name: fullName, email: email)
+            modelContext.insert(profile)
+            isLoggedIn   = true
             onAccountCreated()
         }
     }
