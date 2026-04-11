@@ -42,8 +42,11 @@ struct DashboardView: View {
     @State private var selectedTab: TabItem = .home
     @State private var showCheckIn = false
 
-    // MARK: - Computed data
+    // Ring + score animation
+    @State private var ringProgress: Double = 0
+    @State private var displayedScore: Int  = 0
 
+    // MARK: - Computed data
     private var latestCheckIn: DailyCheckIn? { checkIns.first }
     private var previousCheckIn: DailyCheckIn? { checkIns.count > 1 ? checkIns[1] : nil }
 
@@ -52,9 +55,7 @@ struct DashboardView: View {
         return Calendar.current.isDateInToday(latest.date)
     }
 
-    private var recoveryScore: Int {
-        latestCheckIn?.readinessScore ?? 0
-    }
+    private var recoveryScore: Int { latestCheckIn?.readinessScore ?? 0 }
 
     private var recoveryStatus: String {
         guard latestCheckIn != nil else { return "NO DATA" }
@@ -78,17 +79,15 @@ struct DashboardView: View {
     }
 
     private var sleepString: String {
-        guard let hours = latestCheckIn?.sleepHours else { return "—" }
-        let h = Int(hours)
-        let m = Int((hours - Double(h)) * 60)
-        return m > 0 ? "\(h)h \(m)m" : "\(h)h"
+        guard let h = latestCheckIn?.sleepHours else { return "—" }
+        let hrs = Int(h); let mins = Int((h - Double(hrs)) * 60)
+        return mins > 0 ? "\(hrs)h \(mins)m" : "\(hrs)h"
     }
 
     private var sleepChange: String? {
         guard let today = latestCheckIn?.sleepHours,
-              let yesterday = previousCheckIn?.sleepHours,
-              yesterday > 0 else { return nil }
-        let pct = ((today - yesterday) / yesterday) * 100
+              let prev  = previousCheckIn?.sleepHours, prev > 0 else { return nil }
+        let pct = ((today - prev) / prev) * 100
         return "\(pct >= 0 ? "+" : "")\(Int(pct.rounded()))%"
     }
 
@@ -130,11 +129,11 @@ struct DashboardView: View {
             return ("plus.circle", accentBlue, "Log Check-In", "Complete today's check-in first")
         }
         switch recoveryScore {
-        case 85...100: return ("figure.run",        accentBlue,                              "High Intensity",    "Suggested duration: 60 minutes")
+        case 85...100: return ("figure.run",        accentBlue,                               "High Intensity",    "Suggested duration: 60 minutes")
         case 75..<85:  return ("dumbbell.fill",      Color(red: 0.3, green: 0.45, blue: 0.9), "Strength Training", "Suggested duration: 45 minutes")
         case 60..<75:  return ("figure.walk",        Color(red: 0.45, green: 0.35, blue: 0.22), "Light Training",  "Suggested duration: 30 minutes")
-        case 40..<60:  return ("figure.flexibility", accentTeal.opacity(0.9),                "Active Recovery",   "Suggested duration: 30 minutes")
-        default:       return ("bed.double.fill",    Color(red: 0.35, green: 0.2, blue: 0.6), "Full Rest",        "Recommended for today")
+        case 40..<60:  return ("figure.flexibility", accentTeal.opacity(0.9),                 "Active Recovery",   "Suggested duration: 30 minutes")
+        default:       return ("bed.double.fill",    Color(red: 0.35, green: 0.2, blue: 0.6), "Full Rest",         "Recommended for today")
         }
     }
 
@@ -143,20 +142,21 @@ struct DashboardView: View {
         bgPrimary
             .ignoresSafeArea()
             .overlay(
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 16) {
-                        topBar
-                        if !hasCheckedInToday { checkInPrompt }
-                        recoveryRing
-                        aiInsightCard
-                        metricsRow
-                        hrvTrendCard
-                        nextPhaseCard
+                ZStack {
+                    switch selectedTab {
+                    case .home:
+                        homeContent.transition(.opacity)
+                    case .health:
+                        HealthView(checkIns: checkIns).transition(.opacity)
+                    case .trends:
+                        TrendsView(checkIns: checkIns).transition(.opacity)
+                    case .insights:
+                        InsightsView(checkIns: checkIns).transition(.opacity)
+                    case .profile:
+                        Color.clear
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 16)
                 }
+                .animation(.easeInOut(duration: 0.2), value: selectedTab)
             )
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 bottomNavBar
@@ -164,6 +164,48 @@ struct DashboardView: View {
             .sheet(isPresented: $showCheckIn) {
                 CheckInView()
             }
+            .onAppear { triggerAnimation() }
+            .onChange(of: checkIns.first?.readinessScore) { _, _ in triggerAnimation() }
+    }
+
+    // MARK: - Animation
+    private func triggerAnimation() {
+        let target = recoveryScore
+        guard target > 0 else { return }
+
+        ringProgress   = 0
+        displayedScore = 0
+
+        withAnimation(.easeOut(duration: 1.4).delay(0.2)) {
+            ringProgress = Double(target) / 100.0
+        }
+
+        // Count-up effect: step score 35 times over 1.4s
+        let steps = 35
+        for i in 1...steps {
+            let delay = 0.2 + 1.4 * Double(i) / Double(steps)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                displayedScore = Int(Double(target) * Double(i) / Double(steps))
+            }
+        }
+    }
+
+    // MARK: - Home content
+    private var homeContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 16) {
+                topBar
+                if !hasCheckedInToday { checkInPrompt }
+                recoveryRing
+                aiInsightCard
+                metricsRow
+                hrvTrendCard
+                nextPhaseCard
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+        }
     }
 
     // MARK: Top bar
@@ -181,9 +223,7 @@ struct DashboardView: View {
 
                 if latestCheckIn != nil {
                     ZStack {
-                        Circle()
-                            .fill(accentBlue)
-                            .frame(width: 18, height: 18)
+                        Circle().fill(accentBlue).frame(width: 18, height: 18)
                         Text("\(recoveryScore)")
                             .font(.system(size: 7, weight: .bold))
                             .foregroundStyle(.white)
@@ -200,7 +240,7 @@ struct DashboardView: View {
 
             Spacer()
 
-            Button(action: { showCheckIn = true }) {
+            Button { showCheckIn = true } label: {
                 Image(systemName: "plus.circle")
                     .font(.system(size: 22))
                     .foregroundStyle(accentBlue)
@@ -212,12 +252,10 @@ struct DashboardView: View {
 
     // MARK: Check-in prompt
     private var checkInPrompt: some View {
-        Button(action: { showCheckIn = true }) {
+        Button { showCheckIn = true } label: {
             HStack(spacing: 14) {
                 ZStack {
-                    Circle()
-                        .fill(accentBlue.opacity(0.15))
-                        .frame(width: 42, height: 42)
+                    Circle().fill(accentBlue.opacity(0.15)).frame(width: 42, height: 42)
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: 22))
                         .foregroundStyle(accentBlue)
@@ -239,12 +277,7 @@ struct DashboardView: View {
                     .foregroundStyle(.white.opacity(0.35))
             }
             .padding(16)
-            .background(
-                bgCard.overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(accentBlue.opacity(0.35), lineWidth: 1)
-                )
-            )
+            .background(bgCard.overlay(RoundedRectangle(cornerRadius: 14).stroke(accentBlue.opacity(0.35), lineWidth: 1)))
             .clipShape(RoundedRectangle(cornerRadius: 14))
         }
     }
@@ -252,16 +285,14 @@ struct DashboardView: View {
     // MARK: Recovery score ring
     private var recoveryRing: some View {
         ZStack {
-            // Track
             Circle()
                 .trim(from: 0, to: 0.75)
                 .stroke(Color.white.opacity(0.08), style: StrokeStyle(lineWidth: 14, lineCap: .round))
                 .rotationEffect(.degrees(135))
 
-            // Filled arc — proportional to score
             if latestCheckIn != nil {
                 Circle()
-                    .trim(from: 0, to: 0.75 * Double(recoveryScore) / 100.0)
+                    .trim(from: 0, to: 0.75 * ringProgress)
                     .stroke(
                         AngularGradient(
                             colors: [accentBlue, accentTeal, accentBlue],
@@ -275,9 +306,10 @@ struct DashboardView: View {
             }
 
             VStack(spacing: 4) {
-                Text(latestCheckIn != nil ? "\(recoveryScore)" : "—")
+                Text(latestCheckIn != nil ? "\(displayedScore)" : "—")
                     .font(.system(size: 72, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
+                    .contentTransition(.numericText())
 
                 Text(recoveryStatus)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -306,67 +338,41 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    // MARK: Metrics row (Sleep + HR)
+    // MARK: Metrics row
     private var metricsRow: some View {
         HStack(spacing: 12) {
             metricCard(
-                icon: "moon.fill",
-                iconColor: .white.opacity(0.7),
-                badge: sleepChange,
-                badgeColor: sleepChangeColor,
-                label: "SLEEP QUALITY",
-                value: sleepString,
-                trendIcon: nil
+                icon: "moon.fill", iconColor: .white.opacity(0.7),
+                badge: sleepChange, badgeColor: sleepChangeColor,
+                label: "SLEEP QUALITY", value: sleepString, trendIcon: nil
             )
-
             metricCard(
-                icon: "heart",
-                iconColor: .white.opacity(0.7),
-                badge: nil,
-                badgeColor: .clear,
-                label: "RESTING HR",
-                value: restingHRString,
+                icon: "heart", iconColor: .white.opacity(0.7),
+                badge: nil, badgeColor: .clear,
+                label: "RESTING HR", value: restingHRString,
                 trendIcon: latestCheckIn != nil ? "arrow.down.right" : nil
             )
         }
     }
 
     private func metricCard(
-        icon: String,
-        iconColor: Color,
-        badge: String?,
-        badgeColor: Color,
-        label: String,
-        value: String,
+        icon: String, iconColor: Color,
+        badge: String?, badgeColor: Color,
+        label: String, value: String,
         trendIcon: String?
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(iconColor)
-
+                Image(systemName: icon).font(.system(size: 16)).foregroundStyle(iconColor)
                 Spacer()
-
                 if let badge {
-                    Text(badge)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(badgeColor)
+                    Text(badge).font(.system(size: 12, weight: .semibold)).foregroundStyle(badgeColor)
                 } else if let trendIcon {
-                    Image(systemName: trendIcon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(accentTeal)
+                    Image(systemName: trendIcon).font(.system(size: 14, weight: .semibold)).foregroundStyle(accentTeal)
                 }
             }
-
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .kerning(1)
-                .foregroundStyle(labelGray)
-
-            Text(value)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+            Text(label).font(.system(size: 10, weight: .medium)).kerning(1).foregroundStyle(labelGray)
+            Text(value).font(.system(size: 24, weight: .bold, design: .rounded)).foregroundStyle(.white)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -386,9 +392,7 @@ struct DashboardView: View {
                 Text(hrvString)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-
                 Spacer()
-
                 if latestCheckIn?.hrvMs != nil {
                     Text("ABOVE BASELINE")
                         .font(.system(size: 11, weight: .semibold))
@@ -399,31 +403,18 @@ struct DashboardView: View {
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.08)).frame(height: 6)
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.white.opacity(0.08))
-                        .frame(height: 6)
-
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(
-                            LinearGradient(
-                                colors: [accentBlue, accentTeal],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
+                        .fill(LinearGradient(colors: [accentBlue, accentTeal], startPoint: .leading, endPoint: .trailing))
                         .frame(width: geo.size.width * hrvProgress, height: 6)
                 }
             }
             .frame(height: 6)
 
             HStack {
-                Text("DAY 1")
-                    .font(.system(size: 10))
-                    .foregroundStyle(labelGray)
+                Text("DAY 1").font(.system(size: 10)).foregroundStyle(labelGray)
                 Spacer()
-                Text("DAY 7")
-                    .font(.system(size: 10))
-                    .foregroundStyle(labelGray)
+                Text("DAY 7").font(.system(size: 10)).foregroundStyle(labelGray)
             }
         }
         .padding(16)
@@ -441,12 +432,8 @@ struct DashboardView: View {
 
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(nextPhase.iconBg)
-                        .frame(width: 52, height: 52)
-                    Image(systemName: nextPhase.icon)
-                        .font(.system(size: 24))
-                        .foregroundStyle(.white)
+                    RoundedRectangle(cornerRadius: 10).fill(nextPhase.iconBg).frame(width: 52, height: 52)
+                    Image(systemName: nextPhase.icon).font(.system(size: 24)).foregroundStyle(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -479,11 +466,8 @@ struct DashboardView: View {
                     else { selectedTab = tab }
                 } label: {
                     VStack(spacing: 4) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 20))
-                        Text(tab.rawValue)
-                            .font(.system(size: 9, weight: .medium))
-                            .kerning(0.5)
+                        Image(systemName: tab.icon).font(.system(size: 20))
+                        Text(tab.rawValue).font(.system(size: 9, weight: .medium)).kerning(0.5)
                     }
                     .foregroundStyle(selectedTab == tab ? .white : Color.white.opacity(0.35))
                     .frame(maxWidth: .infinity)
@@ -493,12 +477,7 @@ struct DashboardView: View {
         .padding(.vertical, 12)
         .background(
             bgCard
-                .overlay(
-                    Rectangle()
-                        .fill(Color.white.opacity(0.06))
-                        .frame(height: 1),
-                    alignment: .top
-                )
+                .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1), alignment: .top)
                 .ignoresSafeArea(edges: .bottom)
         )
     }
