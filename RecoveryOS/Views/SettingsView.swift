@@ -7,43 +7,19 @@
 
 import SwiftUI
 
-// MARK: - Bottom nav tabs (updated structure matching design)
-enum MainTab: String, CaseIterable {
-    case home    = "HOME"
-    case trends  = "TRENDS"
-    case recover = "RECOVER"
-    case coach   = "COACH"
-    case you     = "YOU"
-
-    var icon: String {
-        switch self {
-        case .home:    return "house.fill"
-        case .trends:  return "chart.line.uptrend.xyaxis"
-        case .recover: return "arrow.trianglehead.clockwise.rotate.90"
-        case .coach:   return "person.wave.2"
-        case .you:     return "person.circle.fill"
-        }
-    }
-}
-
 // MARK: - SettingsView
 struct SettingsView: View {
 
-    var onBack: () -> Void
+    var onSignedOut: () -> Void
 
-    @AppStorage("isLoggedIn")              private var isLoggedIn = false
-    @AppStorage("hasCompletedOnboarding")  private var hasCompletedOnboarding = false
+    @AppStorage("isLoggedIn")             private var isLoggedIn = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     // Toggles (UI only)
     @State private var recoveryReminders = true
     @State private var biometricUnlock   = true
 
-    // Active tab
-    @State private var activeTab: MainTab = .you
-
     // Entrance animations
-    @State private var headerOpacity: Double  = 0
-    @State private var headerSlide: CGFloat   = -12
     @State private var profileOpacity: Double = 0
     @State private var profileScale: CGFloat  = 0.94
     @State private var sectionsOpacity: Double = 0
@@ -52,64 +28,45 @@ struct SettingsView: View {
     // Design tokens
     private let bgPrimary  = Color(red: 0.04, green: 0.04, blue: 0.07)
     private let bgCard     = Color(red: 0.09, green: 0.09, blue: 0.13)
-    private let bgRow      = Color(red: 0.11, green: 0.11, blue: 0.16)
     private let accentBlue = Color(red: 0.28, green: 0.48, blue: 0.98)
     private let accentTeal = Color(red: 0.25, green: 0.90, blue: 0.69)
     private let labelGray  = Color.white.opacity(0.38)
     private let valueGray  = Color.white.opacity(0.45)
 
     var body: some View {
-        ZStack {
-            bgPrimary.ignoresSafeArea()
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 22) {
 
-            VStack(spacing: 0) {
-
-                // Navigation header
+                // Page title
                 HStack {
-                    Button(action: onBack) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .semibold))
-                            Text("Settings")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                        }
+                    Text("Profile")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
-                    }
                     Spacer()
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 16)
                 .padding(.top, 16)
-                .padding(.bottom, 12)
-                .opacity(headerOpacity)
-                .offset(y: headerSlide)
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 22) {
-
-                        // Profile card
-                        profileCard
-                            .opacity(profileOpacity)
-                            .scaleEffect(profileScale)
-
-                        // Sections
-                        VStack(spacing: 16) {
-                            accountSection
-                            recoveryPreferencesSection
-                            connectedDevicesSection
-                            privacySection
-                            signOutButton
-                            versionFooter
-                        }
-                        .opacity(sectionsOpacity)
-                        .offset(y: sectionsSlide)
-                    }
+                // Profile card
+                profileCard
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 20)
-                }
+                    .opacity(profileOpacity)
+                    .scaleEffect(profileScale)
 
-                // Bottom nav
-                bottomNavBar
+                // Sections
+                VStack(spacing: 16) {
+                    accountSection
+                    recoveryPreferencesSection
+                    connectedDevicesSection
+                    privacySection
+                    signOutButton
+                    versionFooter
+                }
+                .padding(.horizontal, 16)
+                .opacity(sectionsOpacity)
+                .offset(y: sectionsSlide)
             }
+            .padding(.bottom, 20)
         }
         .onAppear { beginAnimations() }
     }
@@ -260,7 +217,7 @@ struct SettingsView: View {
         Button(action: {
             isLoggedIn = false
             hasCompletedOnboarding = false
-            onBack()
+            onSignedOut()
         }) {
             HStack(spacing: 10) {
                 Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -289,31 +246,6 @@ struct SettingsView: View {
             .foregroundColor(.white.opacity(0.18))
             .padding(.top, 4)
             .padding(.bottom, 8)
-    }
-
-    // MARK: - Bottom nav bar
-    private var bottomNavBar: some View {
-        HStack(spacing: 0) {
-            ForEach(MainTab.allCases, id: \.self) { tab in
-                Button { activeTab = tab } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 20))
-                        Text(tab.rawValue)
-                            .font(.system(size: 9, weight: .medium))
-                            .kerning(0.5)
-                    }
-                    .foregroundColor(activeTab == tab ? .white : Color.white.opacity(0.3))
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .padding(.vertical, 12)
-        .background(
-            bgCard
-                .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1), alignment: .top)
-                .ignoresSafeArea(edges: .bottom)
-        )
     }
 
     // MARK: - Reusable components
@@ -401,15 +333,11 @@ struct SettingsView: View {
 
     // MARK: - Entrance animations
     private func beginAnimations() {
-        withAnimation(.easeOut(duration: 0.5)) {
-            headerOpacity = 1
-            headerSlide   = 0
-        }
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.75).delay(0.15)) {
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) {
             profileOpacity = 1
             profileScale   = 1.0
         }
-        withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.3)) {
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.15)) {
             sectionsOpacity = 1
             sectionsSlide   = 0
         }
@@ -417,5 +345,5 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(onBack: {})
+    SettingsView(onSignedOut: {})
 }
