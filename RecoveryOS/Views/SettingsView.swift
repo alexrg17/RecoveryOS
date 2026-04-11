@@ -31,6 +31,9 @@ struct SettingsView: View {
 
     var onBack: () -> Void
 
+    @AppStorage("isLoggedIn")              private var isLoggedIn = false
+    @AppStorage("hasCompletedOnboarding")  private var hasCompletedOnboarding = false
+
     // Toggles (UI only)
     @State private var recoveryReminders = true
     @State private var biometricUnlock   = true
@@ -254,7 +257,11 @@ struct SettingsView: View {
 
     // MARK: - Sign out button
     private var signOutButton: some View {
-        Button(action: {}) {
+        Button(action: {
+            isLoggedIn = false
+            hasCompletedOnboarding = false
+            onBack()
+        }) {
             HStack(spacing: 10) {
                 Image(systemName: "rectangle.portrait.and.arrow.right")
                     .font(.system(size: 16))
