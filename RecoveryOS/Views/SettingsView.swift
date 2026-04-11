@@ -215,6 +215,7 @@ struct SettingsView: View {
     // MARK: - Sign out button
     private var signOutButton: some View {
         Button(action: {
+            NotificationManager.shared.cancelAllNotifications()
             isLoggedIn = false
             hasCompletedOnboarding = false
             onSignedOut()

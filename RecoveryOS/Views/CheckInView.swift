@@ -197,6 +197,7 @@ struct CheckInView: View {
             readinessScore: score
         )
         modelContext.insert(checkIn)
+        NotificationManager.shared.scheduleRecoveryAlertIfNeeded(score: score)
         dismiss()
     }
 }
