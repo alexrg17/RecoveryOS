@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct InsightsView: View {
     let checkIns: [DailyCheckIn]
@@ -103,6 +104,20 @@ struct InsightsView: View {
         .padding(16)
         .background(bgCard)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = "\(item.title): \(item.body)"
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            } label: {
+                Label("Copy Insight", systemImage: "doc.on.doc")
+            }
+            Button {
+                UIPasteboard.general.string = "RecoveryOS Insight — \(item.title): \(item.body)"
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            } label: {
+                Label("Share Insight", systemImage: "square.and.arrow.up")
+            }
+        }
     }
 
     // MARK: - Empty state
