@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 // MARK: - Colours
 private let bgPrimary   = Color(red: 0.04, green: 0.04, blue: 0.07)
@@ -36,9 +37,108 @@ private enum TabItem: String, CaseIterable {
 // MARK: - Dashboard
 struct DashboardView: View {
     var onProfileTapped: (() -> Void)? = nil
-    @State private var selectedTab: TabItem = .home
-    private let recoveryScore = 88
 
+    @Query(sort: \DailyCheckIn.date, order: .reverse) private var checkIns: [DailyCheckIn]
+    @State private var selectedTab: TabItem = .home
+    @State private var showCheckIn = false
+
+    // MARK: - Computed data
+
+    private var latestCheckIn: DailyCheckIn? { checkIns.first }
+    private var previousCheckIn: DailyCheckIn? { checkIns.count > 1 ? checkIns[1] : nil }
+
+    private var hasCheckedInToday: Bool {
+        guard let latest = latestCheckIn else { return false }
+        return Calendar.current.isDateInToday(latest.date)
+    }
+
+    private var recoveryScore: Int {
+        latestCheckIn?.readinessScore ?? 0
+    }
+
+    private var recoveryStatus: String {
+        guard latestCheckIn != nil else { return "NO DATA" }
+        switch recoveryScore {
+        case 85...100: return "OPTIMAL"
+        case 75..<85:  return "GOOD"
+        case 60..<75:  return "MODERATE"
+        case 40..<60:  return "FAIR"
+        default:       return "POOR"
+        }
+    }
+
+    private var statusColor: Color {
+        switch recoveryScore {
+        case 85...100: return accentTeal
+        case 75..<85:  return Color(red: 0.4, green: 0.85, blue: 0.55)
+        case 60..<75:  return Color(red: 1.0, green: 0.75, blue: 0.2)
+        case 40..<60:  return Color(red: 1.0, green: 0.55, blue: 0.2)
+        default:       return Color(red: 1.0, green: 0.38, blue: 0.38)
+        }
+    }
+
+    private var sleepString: String {
+        guard let hours = latestCheckIn?.sleepHours else { return "—" }
+        let h = Int(hours)
+        let m = Int((hours - Double(h)) * 60)
+        return m > 0 ? "\(h)h \(m)m" : "\(h)h"
+    }
+
+    private var sleepChange: String? {
+        guard let today = latestCheckIn?.sleepHours,
+              let yesterday = previousCheckIn?.sleepHours,
+              yesterday > 0 else { return nil }
+        let pct = ((today - yesterday) / yesterday) * 100
+        return "\(pct >= 0 ? "+" : "")\(Int(pct.rounded()))%"
+    }
+
+    private var sleepChangeColor: Color {
+        guard let c = sleepChange else { return .clear }
+        return c.hasPrefix("+") ? Color(red: 0.2, green: 0.85, blue: 0.4) : Color(red: 1.0, green: 0.38, blue: 0.38)
+    }
+
+    private var hrvString: String {
+        guard let hrv = latestCheckIn?.hrvMs else { return "—" }
+        return "\(Int(hrv)) ms"
+    }
+
+    private var hrvProgress: Double {
+        guard let hrv = latestCheckIn?.hrvMs else { return 0 }
+        return min(hrv / 100.0, 1.0)
+    }
+
+    private var restingHRString: String {
+        guard let hr = latestCheckIn?.restingHR else { return "—" }
+        return "\(Int(hr)) BPM"
+    }
+
+    private var insight: (label: String, body: String) {
+        guard latestCheckIn != nil else {
+            return ("Complete your first check-in:", "Log your daily metrics to receive personalised recovery insights and training recommendations.")
+        }
+        switch recoveryScore {
+        case 85...100: return ("Optimal Performance Window:", "Your CNS recovery is at peak levels. High intensity training is recommended.")
+        case 75..<85:  return ("Good Recovery Status:", "Your body is well recovered. Moderate to high intensity training is appropriate today.")
+        case 60..<75:  return ("Moderate Recovery:", "Consider a moderate session today. Prioritise sleep and hydration to boost recovery.")
+        case 40..<60:  return ("Fair Recovery:", "Your body needs more rest. Light activity or active recovery is recommended today.")
+        default:       return ("Low Recovery Alert:", "Your recovery is compromised. Rest is strongly recommended. Avoid intense training today.")
+        }
+    }
+
+    private var nextPhase: (icon: String, iconBg: Color, title: String, subtitle: String) {
+        guard latestCheckIn != nil else {
+            return ("plus.circle", accentBlue, "Log Check-In", "Complete today's check-in first")
+        }
+        switch recoveryScore {
+        case 85...100: return ("figure.run",        accentBlue,                              "High Intensity",    "Suggested duration: 60 minutes")
+        case 75..<85:  return ("dumbbell.fill",      Color(red: 0.3, green: 0.45, blue: 0.9), "Strength Training", "Suggested duration: 45 minutes")
+        case 60..<75:  return ("figure.walk",        Color(red: 0.45, green: 0.35, blue: 0.22), "Light Training",  "Suggested duration: 30 minutes")
+        case 40..<60:  return ("figure.flexibility", accentTeal.opacity(0.9),                "Active Recovery",   "Suggested duration: 30 minutes")
+        default:       return ("bed.double.fill",    Color(red: 0.35, green: 0.2, blue: 0.6), "Full Rest",        "Recommended for today")
+        }
+    }
+
+    // MARK: - Body
     var body: some View {
         bgPrimary
             .ignoresSafeArea()
@@ -46,6 +146,7 @@ struct DashboardView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 16) {
                         topBar
+                        if !hasCheckedInToday { checkInPrompt }
                         recoveryRing
                         aiInsightCard
                         metricsRow
@@ -60,12 +161,14 @@ struct DashboardView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 bottomNavBar
             }
+            .sheet(isPresented: $showCheckIn) {
+                CheckInView()
+            }
     }
 
     // MARK: Top bar
     private var topBar: some View {
         HStack {
-            // Avatar + score badge
             ZStack(alignment: .bottomTrailing) {
                 Circle()
                     .fill(Color(red: 0.2, green: 0.2, blue: 0.3))
@@ -76,15 +179,17 @@ struct DashboardView: View {
                             .font(.system(size: 20))
                     )
 
-                ZStack {
-                    Circle()
-                        .fill(accentBlue)
-                        .frame(width: 18, height: 18)
-                    Text("\(recoveryScore)")
-                        .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(.white)
+                if latestCheckIn != nil {
+                    ZStack {
+                        Circle()
+                            .fill(accentBlue)
+                            .frame(width: 18, height: 18)
+                        Text("\(recoveryScore)")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .offset(x: 4, y: 4)
                 }
-                .offset(x: 4, y: 4)
             }
 
             Spacer()
@@ -95,12 +200,53 @@ struct DashboardView: View {
 
             Spacer()
 
-            Image(systemName: "bell")
-                .font(.system(size: 20))
-                .foregroundStyle(.white.opacity(0.8))
-                .frame(width: 44, height: 44)
+            Button(action: { showCheckIn = true }) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 22))
+                    .foregroundStyle(accentBlue)
+                    .frame(width: 44, height: 44)
+            }
         }
         .padding(.top, 8)
+    }
+
+    // MARK: Check-in prompt
+    private var checkInPrompt: some View {
+        Button(action: { showCheckIn = true }) {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(accentBlue.opacity(0.15))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(accentBlue)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Log Today's Check-In")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("Complete your daily log to see real insights")
+                        .font(.system(size: 12))
+                        .foregroundStyle(labelGray)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.35))
+            }
+            .padding(16)
+            .background(
+                bgCard.overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(accentBlue.opacity(0.35), lineWidth: 1)
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
     }
 
     // MARK: Recovery score ring
@@ -112,30 +258,31 @@ struct DashboardView: View {
                 .stroke(Color.white.opacity(0.08), style: StrokeStyle(lineWidth: 14, lineCap: .round))
                 .rotationEffect(.degrees(135))
 
-            // Filled arc with teal-at-top, blue-at-sides gradient
-            Circle()
-                .trim(from: 0, to: 0.75)
-                .stroke(
-                    AngularGradient(
-                        colors: [accentBlue, accentTeal, accentBlue],
-                        center: .center,
-                        startAngle: .degrees(135),
-                        endAngle: .degrees(405)
-                    ),
-                    style: StrokeStyle(lineWidth: 14, lineCap: .round)
-                )
-                .rotationEffect(.degrees(135))
+            // Filled arc — proportional to score
+            if latestCheckIn != nil {
+                Circle()
+                    .trim(from: 0, to: 0.75 * Double(recoveryScore) / 100.0)
+                    .stroke(
+                        AngularGradient(
+                            colors: [accentBlue, accentTeal, accentBlue],
+                            center: .center,
+                            startAngle: .degrees(135),
+                            endAngle: .degrees(405)
+                        ),
+                        style: StrokeStyle(lineWidth: 14, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(135))
+            }
 
-            // Center text
             VStack(spacing: 4) {
-                Text("\(recoveryScore)")
+                Text(latestCheckIn != nil ? "\(recoveryScore)" : "—")
                     .font(.system(size: 72, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
 
-                Text("OPTIMAL")
+                Text(recoveryStatus)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .kerning(2)
-                    .foregroundStyle(accentTeal)
+                    .foregroundStyle(latestCheckIn != nil ? statusColor : labelGray)
             }
         }
         .frame(width: 210, height: 210)
@@ -144,18 +291,15 @@ struct DashboardView: View {
 
     // MARK: AI insight card
     private var aiInsightCard: some View {
-        HStack(alignment: .top, spacing: 0) {
-            Group {
-                Text("Optimal Performance Window: ")
-                    .foregroundStyle(accentBlue)
-                    .fontWeight(.semibold)
-                +
-                Text("Your CNS recovery is at peak levels. High intensity training is recommended.")
-                    .foregroundStyle(.white)
-            }
-            .font(.system(size: 14))
-            .multilineTextAlignment(.leading)
+        Group {
+            Text(insight.label + " ")
+                .foregroundStyle(accentBlue)
+                .fontWeight(.semibold)
+            + Text(insight.body)
+                .foregroundStyle(.white)
         }
+        .font(.system(size: 14))
+        .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(bgCard)
@@ -168,10 +312,10 @@ struct DashboardView: View {
             metricCard(
                 icon: "moon.fill",
                 iconColor: .white.opacity(0.7),
-                badge: "+12%",
-                badgeColor: Color(red: 0.2, green: 0.85, blue: 0.4),
+                badge: sleepChange,
+                badgeColor: sleepChangeColor,
                 label: "SLEEP QUALITY",
-                value: "8h 42m",
+                value: sleepString,
                 trendIcon: nil
             )
 
@@ -181,8 +325,8 @@ struct DashboardView: View {
                 badge: nil,
                 badgeColor: .clear,
                 label: "RESTING HR",
-                value: "54 BPM",
-                trendIcon: "arrow.down.right"
+                value: restingHRString,
+                trendIcon: latestCheckIn != nil ? "arrow.down.right" : nil
             )
         }
     }
@@ -239,19 +383,20 @@ struct DashboardView: View {
                 .foregroundStyle(labelGray)
 
             HStack(alignment: .bottom) {
-                Text("72 ms")
+                Text(hrvString)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
 
                 Spacer()
 
-                Text("ABOVE BASELINE")
-                    .font(.system(size: 11, weight: .semibold))
-                    .kerning(1)
-                    .foregroundStyle(accentTeal)
+                if latestCheckIn?.hrvMs != nil {
+                    Text("ABOVE BASELINE")
+                        .font(.system(size: 11, weight: .semibold))
+                        .kerning(1)
+                        .foregroundStyle(accentTeal)
+                }
             }
 
-            // Progress bar
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
@@ -266,7 +411,7 @@ struct DashboardView: View {
                                 endPoint: .trailing
                             )
                         )
-                        .frame(width: geo.size.width * 0.78, height: 6)
+                        .frame(width: geo.size.width * hrvProgress, height: 6)
                 }
             }
             .frame(height: 6)
@@ -295,23 +440,20 @@ struct DashboardView: View {
                 .foregroundStyle(accentBlue)
 
             HStack(spacing: 14) {
-                // Shoe icon tile
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(red: 0.45, green: 0.35, blue: 0.22))
+                        .fill(nextPhase.iconBg)
                         .frame(width: 52, height: 52)
-
-                    Image(systemName: "figure.walk")
+                    Image(systemName: nextPhase.icon)
                         .font(.system(size: 24))
                         .foregroundStyle(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Recovery")
+                    Text(nextPhase.title)
                         .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
-
-                    Text("Suggested duration: 45 minutes")
+                    Text(nextPhase.subtitle)
                         .font(.system(size: 13))
                         .foregroundStyle(labelGray)
                 }
@@ -339,7 +481,6 @@ struct DashboardView: View {
                     VStack(spacing: 4) {
                         Image(systemName: tab.icon)
                             .font(.system(size: 20))
-
                         Text(tab.rawValue)
                             .font(.system(size: 9, weight: .medium))
                             .kerning(0.5)
@@ -365,4 +506,5 @@ struct DashboardView: View {
 
 #Preview {
     DashboardView()
+        .modelContainer(for: DailyCheckIn.self, inMemory: true)
 }
