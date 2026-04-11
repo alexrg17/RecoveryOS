@@ -36,7 +36,7 @@ private enum TabItem: String, CaseIterable {
 
 // MARK: - Dashboard
 struct DashboardView: View {
-    var onProfileTapped: (() -> Void)? = nil
+    var onSignedOut: (() -> Void)? = nil
 
     @Query(sort: \DailyCheckIn.date, order: .reverse) private var checkIns: [DailyCheckIn]
     @State private var selectedTab: TabItem = .home
@@ -139,33 +139,31 @@ struct DashboardView: View {
 
     // MARK: - Body
     var body: some View {
-        bgPrimary
-            .ignoresSafeArea()
-            .overlay(
-                ZStack {
-                    switch selectedTab {
-                    case .home:
-                        homeContent.transition(.opacity)
-                    case .health:
-                        HealthView(checkIns: checkIns).transition(.opacity)
-                    case .trends:
-                        TrendsView(checkIns: checkIns).transition(.opacity)
-                    case .insights:
-                        InsightsView(checkIns: checkIns).transition(.opacity)
-                    case .profile:
-                        Color.clear
-                    }
-                }
-                .animation(.easeInOut(duration: 0.2), value: selectedTab)
-            )
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                bottomNavBar
+        ZStack {
+            bgPrimary.ignoresSafeArea()
+
+            switch selectedTab {
+            case .home:
+                homeContent.transition(.opacity)
+            case .health:
+                HealthView(checkIns: checkIns).transition(.opacity)
+            case .trends:
+                TrendsView(checkIns: checkIns).transition(.opacity)
+            case .insights:
+                InsightsView(checkIns: checkIns).transition(.opacity)
+            case .profile:
+                SettingsView(onSignedOut: { onSignedOut?() }).transition(.opacity)
             }
-            .sheet(isPresented: $showCheckIn) {
-                CheckInView()
-            }
-            .onAppear { triggerAnimation() }
-            .onChange(of: checkIns.first?.readinessScore) { _, _ in triggerAnimation() }
+        }
+        .animation(.easeInOut(duration: 0.2), value: selectedTab)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            bottomNavBar
+        }
+        .sheet(isPresented: $showCheckIn) {
+            CheckInView()
+        }
+        .onAppear { triggerAnimation() }
+        .onChange(of: checkIns.first?.readinessScore) { _, _ in triggerAnimation() }
     }
 
     // MARK: - Animation
@@ -462,8 +460,7 @@ struct DashboardView: View {
         HStack(spacing: 0) {
             ForEach(TabItem.allCases, id: \.self) { tab in
                 Button {
-                    if tab == .profile { onProfileTapped?() }
-                    else { selectedTab = tab }
+                    selectedTab = tab
                 } label: {
                     VStack(spacing: 4) {
                         Image(systemName: tab.icon).font(.system(size: 20))
