@@ -12,6 +12,8 @@ struct LoginView: View {
     var onSignedIn: () -> Void
     var onCreateAccount: () -> Void
 
+    @AppStorage("isLoggedIn") private var isLoggedIn = false
+
     // Fields
     @State private var email           = ""
     @State private var password        = ""
@@ -345,6 +347,7 @@ struct LoginView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
             isLoading    = false
             spinnerAngle = 0
+            isLoggedIn   = true
             onSignedIn()
         }
     }

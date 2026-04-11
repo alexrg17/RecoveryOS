@@ -14,7 +14,19 @@ enum AppScreen {
 }
 
 struct ContentView: View {
-    @State private var screen: AppScreen = .welcome
+    @State private var screen: AppScreen
+
+    init() {
+        let loggedIn  = UserDefaults.standard.bool(forKey: "isLoggedIn")
+        let onboarded = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+        if loggedIn && onboarded {
+            _screen = State(initialValue: .dashboard)
+        } else if loggedIn {
+            _screen = State(initialValue: .onboarding)
+        } else {
+            _screen = State(initialValue: .welcome)
+        }
+    }
 
     var body: some View {
         ZStack {

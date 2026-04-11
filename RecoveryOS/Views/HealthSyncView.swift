@@ -6,11 +6,16 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct HealthSyncView: View {
 
     var onSynced: () -> Void
     var onSkipped: () -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @Query private var profiles: [UserProfile]
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     // Discipline selection
     @State private var selectedDiscipline: Discipline = .strength
@@ -162,12 +167,12 @@ struct HealthSyncView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         sectionLabel("INTENSITY")
 
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.white.opacity(0.08))
-                                .frame(height: 6)
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.white.opacity(0.08))
+                                    .frame(height: 6)
 
-                            GeometryReader { geo in
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(
                                         LinearGradient(
@@ -178,14 +183,14 @@ struct HealthSyncView: View {
                                     )
                                     .frame(width: geo.size.width * intensity, height: 6)
                             }
-                            .frame(height: 6)
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        intensity = max(0, min(1, value.location.x / geo.size.width))
+                                    }
+                            )
                         }
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    // Visual only — no real logic
-                                }
-                        )
+                        .frame(height: 6)
 
                         HStack {
                             Text("LIT")
@@ -250,7 +255,7 @@ struct HealthSyncView: View {
                     .offset(y: cardSlide)
 
                     // Sync button
-                    Button(action: onSynced) {
+                    Button(action: { saveProfileAndFinish(then: onSynced) }) {
                         HStack(spacing: 10) {
                             Image(systemName: "gearshape.2.fill")
                                 .font(.system(size: 15))
@@ -277,7 +282,7 @@ struct HealthSyncView: View {
                     .opacity(buttonOpacity)
 
                     // Configure manually
-                    Button(action: onSkipped) {
+                    Button(action: { saveProfileAndFinish(then: onSkipped) }) {
                         Text("CONFIGURE MANUALLY")
                             .font(.system(size: 12, weight: .semibold))
                             .kerning(1)
@@ -377,6 +382,19 @@ struct HealthSyncView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Persist onboarding data
+    private func saveProfileAndFinish(then callback: () -> Void) {
+        let disciplineString = selectedDiscipline == .endurance ? "endurance" : "strength"
+        if let profile = profiles.first {
+            profile.discipline          = disciplineString
+            profile.age                 = Int(age)
+            profile.intensity           = intensity
+            profile.onboardingCompleted = true
+        }
+        hasCompletedOnboarding = true
+        callback()
     }
 
     // MARK: - Entrance animations
