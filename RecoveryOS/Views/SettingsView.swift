@@ -128,31 +128,6 @@ struct SettingsView: View {
             settingsRow(icon: "envelope", iconColor: accentBlue, title: "Email", value: "m.holloway@pro.com")
             divider
             settingsRow(icon: "lock", iconColor: accentBlue, title: "Password")
-            divider
-            HStack {
-                iconCircle("star", color: accentBlue)
-                Text("Subscription")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundColor(.white)
-                Spacer()
-                Text("PREMIUM")
-                    .font(.system(size: 10, weight: .bold))
-                    .kerning(1)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        LinearGradient(
-                            colors: [Color(red: 0.85, green: 0.65, blue: 0.15), Color(red: 0.95, green: 0.78, blue: 0.3)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .clipShape(Capsule())
-                chevron
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 13)
         }
     }
 
@@ -191,15 +166,6 @@ struct SettingsView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 13)
-
-            divider
-            settingsRow(icon: "g.circle.fill", iconColor: Color(red: 0.2, green: 0.7, blue: 0.4), title: "Garmin")
-            divider
-            settingsRow(icon: "bolt.heart.fill", iconColor: Color(red: 0.9, green: 0.3, blue: 0.5), title: "Fitbit")
-            divider
-            settingsRow(icon: "waveform.path.ecg", iconColor: Color(red: 0.9, green: 0.5, blue: 0.15), title: "WHOOP")
-            divider
-            settingsRow(icon: "circle.hexagongrid.fill", iconColor: Color(red: 0.45, green: 0.28, blue: 0.98), title: "Oura")
         }
     }
 
