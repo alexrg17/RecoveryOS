@@ -39,6 +39,8 @@ private enum TabItem: String, CaseIterable {
 struct DashboardView: View {
     var onSignedOut: (() -> Void)? = nil
 
+    @EnvironmentObject private var healthKit: HealthKitManager
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \DailyCheckIn.date, order: .reverse) private var checkIns: [DailyCheckIn]
     @State private var selectedTab: TabItem = .home
     @State private var showCheckIn            = false
@@ -82,7 +84,7 @@ struct DashboardView: View {
     }
 
     private var sleepString: String {
-        guard let h = latestCheckIn?.sleepHours else { return "—" }
+        guard let h = latestCheckIn?.sleepHours ?? healthKit.latestSnapshot.sleepHours else { return "—" }
         let hrs = Int(h); let mins = Int((h - Double(hrs)) * 60)
         return mins > 0 ? "\(hrs)h \(mins)m" : "\(hrs)h"
     }
@@ -100,17 +102,17 @@ struct DashboardView: View {
     }
 
     private var hrvString: String {
-        guard let hrv = latestCheckIn?.hrvMs else { return "—" }
+        guard let hrv = latestCheckIn?.hrvMs ?? healthKit.latestSnapshot.hrvMs else { return "—" }
         return "\(Int(hrv)) ms"
     }
 
     private var hrvProgress: Double {
-        guard let hrv = latestCheckIn?.hrvMs else { return 0 }
+        guard let hrv = latestCheckIn?.hrvMs ?? healthKit.latestSnapshot.hrvMs else { return 0 }
         return min(hrv / 100.0, 1.0)
     }
 
     private var restingHRString: String {
-        guard let hr = latestCheckIn?.restingHR else { return "—" }
+        guard let hr = latestCheckIn?.restingHR ?? healthKit.latestSnapshot.restingHR else { return "—" }
         return "\(Int(hr)) BPM"
     }
 
@@ -149,7 +151,7 @@ struct DashboardView: View {
             case .home:
                 homeContent.transition(.opacity)
             case .health:
-                HealthView(checkIns: checkIns).transition(.opacity)
+                HealthView(checkIns: checkIns, snapshot: healthKit.latestSnapshot).transition(.opacity)
             case .trends:
                 TrendsView(checkIns: checkIns).transition(.opacity)
             case .insights:
@@ -164,13 +166,19 @@ struct DashboardView: View {
             bottomNavBar
         }
         .sheet(isPresented: $showCheckIn) {
-            CheckInView()
+            CheckInView(prefill: hasCheckedInToday ? nil : healthKit.latestSnapshot)
         }
         .sheet(isPresented: $showNotificationPicker) {
             NotificationPickerView(sentNotification: $notificationSent)
         }
-        .onAppear { triggerAnimation() }
+        .onAppear {
+            triggerAnimation()
+            healthKit.syncToContext(modelContext)
+        }
         .onChange(of: checkIns.first?.readinessScore) { _, _ in triggerAnimation() }
+        .onChange(of: healthKit.isAuthorized) { _, granted in
+            if granted { healthKit.syncToContext(modelContext) }
+        }
     }
 
     // MARK: - Animation

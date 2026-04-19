@@ -10,21 +10,31 @@ import SwiftData
 import UIKit
 
 struct CheckInView: View {
+    var prefill: HealthKitSnapshot? = nil
+
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    // Sliders (1–10)
+    // Sliders (1-10)
     @State private var soreness:  Double = 5
     @State private var energy:    Double = 5
     @State private var stress:    Double = 5
     @State private var hydration: Double = 5
     @State private var mood:      Double = 5
 
-    // Optional biometric fields
-    @State private var sleepHoursText = ""
-    @State private var hrvText        = ""
-    @State private var restingHRText  = ""
-    @State private var workoutLoad: Double = 5
+    // Biometric fields - pre-filled from HealthKit if available
+    @State private var sleepHoursText: String
+    @State private var hrvText:        String
+    @State private var restingHRText:  String
+    @State private var workoutLoad:    Double
+
+    init(prefill: HealthKitSnapshot? = nil) {
+        self.prefill    = prefill
+        _sleepHoursText = State(initialValue: prefill?.sleepHours.map { String(format: "%.1f", $0) } ?? "")
+        _hrvText        = State(initialValue: prefill?.hrvMs.map      { String(format: "%.0f", $0) } ?? "")
+        _restingHRText  = State(initialValue: prefill?.restingHR.map  { String(format: "%.0f", $0) } ?? "")
+        _workoutLoad    = State(initialValue: prefill?.workoutLoad ?? 5)
+    }
 
     // Design tokens
     private let bgPrimary  = Color(red: 0.04, green: 0.04, blue: 0.07)
@@ -68,7 +78,7 @@ struct CheckInView: View {
 
                         // Biometrics
                         VStack(spacing: 0) {
-                            sectionHeader("BIOMETRICS  •  OPTIONAL")
+                            sectionHeader(prefill != nil ? "BIOMETRICS  •  FROM APPLE HEALTH" : "BIOMETRICS  •  OPTIONAL")
                             VStack(spacing: 12) {
                                 biometricField(label: "Sleep Hours", placeholder: "e.g. 7.5", text: $sleepHoursText)
                                 biometricField(label: "HRV (ms)",    placeholder: "e.g. 65",  text: $hrvText)
