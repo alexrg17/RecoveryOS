@@ -13,6 +13,11 @@ struct TrendsView: View {
 
     @State private var selectedPeriod = 7
 
+    // Per-chart selection state for scrubbing
+    @State private var scoreSelection:    (Date, Int)?    = nil
+    @State private var sleepSelection:    (Date, Double)? = nil
+    @State private var hrvSelection:      (Date, Double)? = nil
+
     private let bgCard       = Color(red: 0.09, green: 0.09, blue: 0.13)
     private let accentBlue   = Color(red: 0.28, green: 0.48, blue: 0.98)
     private let accentTeal   = Color(red: 0.25, green: 0.90, blue: 0.69)
@@ -43,25 +48,27 @@ struct TrendsView: View {
         }
     }
 
-    // MARK: - Header + period picker
+    // MARK: - Header
     private var headerRow: some View {
         HStack {
             Text("Trends")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
-
             Spacer()
-
             HStack(spacing: 0) {
                 ForEach([7, 30], id: \.self) { period in
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { selectedPeriod = period }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedPeriod = period
+                            scoreSelection = nil
+                            sleepSelection = nil
+                            hrvSelection   = nil
+                        }
                     } label: {
                         Text("\(period)D")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(selectedPeriod == period ? .white : Color.white.opacity(0.4))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
+                            .padding(.horizontal, 14).padding(.vertical, 7)
                             .background(selectedPeriod == period ? accentBlue : Color.clear)
                             .clipShape(RoundedRectangle(cornerRadius: 7))
                     }
@@ -100,9 +107,13 @@ struct TrendsView: View {
             return (ci.date, s)
         }
         let avg = data.isEmpty ? 0 : data.map(\.1).reduce(0, +) / data.count
+        let summaryValue = scoreSelection.map { "\($0.1)" } ?? (data.isEmpty ? nil : "Avg \(avg)")
 
-        return chartCard(icon: "bolt.fill", iconColor: accentBlue, label: "RECOVERY SCORE",
-                         summary: data.isEmpty ? nil : "Avg \(avg)") {
+        return chartCard(
+            icon: "bolt.fill", iconColor: accentBlue, label: "RECOVERY SCORE",
+            summary: summaryValue,
+            summaryDate: scoreSelection?.0
+        ) {
             Chart {
                 ForEach(data, id: \.0) { date, score in
                     AreaMark(x: .value("Date", date), y: .value("Score", score))
@@ -114,23 +125,34 @@ struct TrendsView: View {
                         .foregroundStyle(accentBlue)
                         .lineStyle(StrokeStyle(lineWidth: 2.5))
                     PointMark(x: .value("Date", date), y: .value("Score", score))
-                        .foregroundStyle(accentBlue)
-                        .symbolSize(28)
+                        .foregroundStyle(scoreSelection?.0 == date ? .white : accentBlue)
+                        .symbolSize(scoreSelection?.0 == date ? 80 : 24)
+                }
+                if let (selDate, selScore) = scoreSelection {
+                    RuleMark(x: .value("Selected", selDate))
+                        .foregroundStyle(Color.white.opacity(0.25))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4]))
+                    PointMark(x: .value("Date", selDate), y: .value("Score", selScore))
+                        .foregroundStyle(.white).symbolSize(100)
+                        .annotation(position: .top, spacing: 6) {
+                            scrubCallout(value: "\(selScore)", date: selDate, color: accentBlue)
+                        }
                 }
             }
             .chartYScale(domain: 0...100)
-            .chartXAxis {
-                AxisMarks { _ in
-                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-                    AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+            .chartXAxis { AxisMarks { _ in
+                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+            }}
+            .chartYAxis { AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+            }}
+            .chartOverlay { proxy in scrubOverlay(proxy: proxy) { x in
+                if let date: Date = proxy.value(atX: x) {
+                    scoreSelection = data.min { abs($0.0.timeIntervalSince(date)) < abs($1.0.timeIntervalSince(date)) }
                 }
-            }
-            .chartYAxis {
-                AxisMarks(values: .automatic(desiredCount: 5)) { _ in
-                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-                    AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
-                }
-            }
+            } onEnd: { scoreSelection = nil } }
             .frame(height: 160)
             .environment(\.colorScheme, .dark)
         }
@@ -143,46 +165,56 @@ struct TrendsView: View {
             return (ci.date, s)
         }
         let avg = data.isEmpty ? 0.0 : data.map(\.1).reduce(0, +) / Double(data.count)
+        let summaryValue = sleepSelection.map { formatSleep($0.1) } ?? (data.isEmpty ? nil : "Avg \(String(format: "%.1f", avg))h")
 
-        return chartCard(icon: "moon.fill", iconColor: accentPurple, label: "SLEEP",
-                         summary: data.isEmpty ? nil : "Avg \(String(format: "%.1f", avg))h") {
+        return chartCard(
+            icon: "moon.fill", iconColor: accentPurple, label: "SLEEP",
+            summary: summaryValue,
+            summaryDate: sleepSelection?.0
+        ) {
             if data.isEmpty {
                 Text("No sleep data logged yet")
-                    .font(.system(size: 13))
-                    .foregroundStyle(labelGray)
-                    .frame(height: 120)
-                    .frame(maxWidth: .infinity)
+                    .font(.system(size: 13)).foregroundStyle(labelGray)
+                    .frame(height: 120).frame(maxWidth: .infinity)
             } else {
                 Chart {
                     ForEach(data, id: \.0) { date, hours in
                         BarMark(x: .value("Date", date, unit: .day), y: .value("Hours", hours))
-                            .foregroundStyle(LinearGradient(
-                                colors: [accentPurple, accentBlue],
-                                startPoint: .bottom, endPoint: .top
-                            ))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: sleepSelection?.0 == date ? [accentPurple, accentPurple] : [accentPurple, accentBlue],
+                                    startPoint: .bottom, endPoint: .top
+                                )
+                            )
                     }
                     RuleMark(y: .value("Target", 8.0))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
                         .foregroundStyle(accentTeal.opacity(0.6))
                         .annotation(position: .top, alignment: .trailing) {
-                            Text("8h target")
-                                .font(.system(size: 9))
-                                .foregroundStyle(accentTeal.opacity(0.7))
+                            Text("8h target").font(.system(size: 9)).foregroundStyle(accentTeal.opacity(0.7))
                         }
+                    if let (selDate, selHours) = sleepSelection {
+                        BarMark(x: .value("Date", selDate, unit: .day), y: .value("Hours", selHours))
+                            .foregroundStyle(accentPurple)
+                            .annotation(position: .top, spacing: 4) {
+                                scrubCallout(value: formatSleep(selHours), date: selDate, color: accentPurple)
+                            }
+                    }
                 }
                 .chartYScale(domain: 0...12)
-                .chartXAxis {
-                    AxisMarks { _ in
-                        AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-                        AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+                .chartXAxis { AxisMarks { _ in
+                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                    AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+                }}
+                .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                    AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+                }}
+                .chartOverlay { proxy in scrubOverlay(proxy: proxy) { x in
+                    if let date: Date = proxy.value(atX: x) {
+                        sleepSelection = data.min { abs($0.0.timeIntervalSince(date)) < abs($1.0.timeIntervalSince(date)) }
                     }
-                }
-                .chartYAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                        AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-                        AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
-                    }
-                }
+                } onEnd: { sleepSelection = nil } }
                 .frame(height: 140)
                 .environment(\.colorScheme, .dark)
             }
@@ -196,9 +228,13 @@ struct TrendsView: View {
             return (ci.date, h)
         }
         let avg = data.isEmpty ? 0.0 : data.map(\.1).reduce(0, +) / Double(data.count)
+        let summaryValue = hrvSelection.map { "\(Int($0.1)) ms" } ?? (avg > 0 ? "Avg \(Int(avg)) ms" : nil)
 
-        return chartCard(icon: "waveform.path.ecg", iconColor: accentTeal, label: "HRV",
-                         summary: avg > 0 ? "Avg \(Int(avg)) ms" : nil) {
+        return chartCard(
+            icon: "waveform.path.ecg", iconColor: accentTeal, label: "HRV",
+            summary: summaryValue,
+            summaryDate: hrvSelection?.0
+        ) {
             Chart {
                 ForEach(data, id: \.0) { date, hrv in
                     AreaMark(x: .value("Date", date), y: .value("HRV", hrv))
@@ -207,30 +243,40 @@ struct TrendsView: View {
                             startPoint: .top, endPoint: .bottom
                         ))
                     LineMark(x: .value("Date", date), y: .value("HRV", hrv))
-                        .foregroundStyle(accentTeal)
-                        .lineStyle(StrokeStyle(lineWidth: 2.5))
+                        .foregroundStyle(accentTeal).lineStyle(StrokeStyle(lineWidth: 2.5))
                     PointMark(x: .value("Date", date), y: .value("HRV", hrv))
-                        .foregroundStyle(accentTeal)
-                        .symbolSize(28)
+                        .foregroundStyle(hrvSelection?.0 == date ? .white : accentTeal)
+                        .symbolSize(hrvSelection?.0 == date ? 80 : 24)
                 }
                 if avg > 0 {
                     RuleMark(y: .value("Baseline", avg))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
                         .foregroundStyle(accentBlue.opacity(0.5))
                 }
-            }
-            .chartXAxis {
-                AxisMarks { _ in
-                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-                    AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+                if let (selDate, selHrv) = hrvSelection {
+                    RuleMark(x: .value("Selected", selDate))
+                        .foregroundStyle(Color.white.opacity(0.25))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4]))
+                    PointMark(x: .value("Date", selDate), y: .value("HRV", selHrv))
+                        .foregroundStyle(.white).symbolSize(100)
+                        .annotation(position: .top, spacing: 6) {
+                            scrubCallout(value: "\(Int(selHrv)) ms", date: selDate, color: accentTeal)
+                        }
                 }
             }
-            .chartYAxis {
-                AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-                    AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+            .chartXAxis { AxisMarks { _ in
+                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+            }}
+            .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                AxisValueLabel().foregroundStyle(Color.white.opacity(0.4))
+            }}
+            .chartOverlay { proxy in scrubOverlay(proxy: proxy) { x in
+                if let date: Date = proxy.value(atX: x) {
+                    hrvSelection = data.min { abs($0.0.timeIntervalSince(date)) < abs($1.0.timeIntervalSince(date)) }
                 }
-            }
+            } onEnd: { hrvSelection = nil } }
             .frame(height: 140)
             .environment(\.colorScheme, .dark)
         }
@@ -241,29 +287,84 @@ struct TrendsView: View {
     private func chartCard<Content: View>(
         icon: String, iconColor: Color,
         label: String, summary: String?,
+        summaryDate: Date?,
         @ViewBuilder chart: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 11))
-                    .foregroundStyle(iconColor)
-                Text(label)
-                    .font(.system(size: 10, weight: .semibold))
-                    .kerning(1.2)
-                    .foregroundStyle(labelGray)
+                Image(systemName: icon).font(.system(size: 11)).foregroundStyle(iconColor)
+                Text(label).font(.system(size: 10, weight: .semibold)).kerning(1.2).foregroundStyle(labelGray)
                 Spacer()
-                if let summary {
-                    Text(summary)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                VStack(alignment: .trailing, spacing: 1) {
+                    if let summary {
+                        Text(summary)
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .contentTransition(.numericText())
+                            .animation(.easeInOut(duration: 0.1), value: summary)
+                    }
+                    if let date = summaryDate {
+                        Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                            .font(.system(size: 11))
+                            .foregroundStyle(labelGray)
+                            .transition(.opacity)
+                    }
                 }
             }
+            Text("Drag to explore")
+                .font(.system(size: 10, weight: .medium)).kerning(1)
+                .foregroundStyle(Color.white.opacity(0.2))
             chart()
         }
         .padding(16)
         .background(bgCard)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    // MARK: - Shared scrub overlay
+    private func scrubOverlay(
+        proxy: ChartProxy,
+        onChanged: @escaping (CGFloat) -> Void,
+        onEnd: @escaping () -> Void
+    ) -> some View {
+        GeometryReader { geo in
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { drag in
+                            let x = drag.location.x - geo[proxy.plotAreaFrame].origin.x
+                            guard x >= 0 else { return }
+                            withAnimation(.easeInOut(duration: 0.08)) { onChanged(x) }
+                        }
+                        .onEnded { _ in
+                            withAnimation(.easeOut(duration: 0.4)) { onEnd() }
+                        }
+                )
+        }
+    }
+
+    // MARK: - Scrub callout bubble
+    private func scrubCallout(value: String, date: Date, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+            Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                .font(.system(size: 10))
+                .foregroundStyle(Color.white.opacity(0.6))
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(Color(red: 0.14, green: 0.14, blue: 0.20))
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(color.opacity(0.4), lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+    }
+
+    private func formatSleep(_ hours: Double) -> String {
+        let hrs = Int(hours); let mins = Int((hours - Double(hrs)) * 60)
+        return mins > 0 ? "\(hrs)h \(mins)m" : "\(hrs)h"
     }
 }
 
