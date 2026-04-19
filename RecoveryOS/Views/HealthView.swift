@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HealthView: View {
     let checkIns: [DailyCheckIn]
+    var snapshot: HealthKitSnapshot = HealthKitSnapshot()
 
     private let bgCard      = Color(red: 0.09, green: 0.09, blue: 0.13)
     private let accentBlue  = Color(red: 0.28, green: 0.48, blue: 0.98)
@@ -18,6 +19,11 @@ struct HealthView: View {
 
     private var latest: DailyCheckIn? { checkIns.first }
     private var last7: [DailyCheckIn] { Array(checkIns.prefix(7)) }
+
+    // Biometrics: prefer today's check-in, fall back to live snapshot
+    private var sleepHours: Double? { latest?.sleepHours ?? snapshot.sleepHours }
+    private var hrvMs: Double?      { latest?.hrvMs      ?? snapshot.hrvMs }
+    private var restingHR: Double?  { latest?.restingHR  ?? snapshot.restingHR }
 
     private var avgSleep: Double? {
         let v = last7.compactMap(\.sleepHours)
@@ -148,7 +154,7 @@ struct HealthView: View {
                 Spacer()
             }
 
-            Text(formatSleep(latest?.sleepHours))
+            Text(formatSleep(sleepHours))
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
 
@@ -164,7 +170,7 @@ struct HealthView: View {
                 }
             }
 
-            if let hours = latest?.sleepHours {
+            if let hours = sleepHours {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 4)
@@ -207,11 +213,11 @@ struct HealthView: View {
                         .foregroundStyle(labelGray)
                 }
 
-                Text(latest?.hrvMs.map { "\(Int($0)) ms" } ?? "—")
+                Text(hrvMs.map { "\(Int($0)) ms" } ?? "—")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
 
-                if let hrv = latest?.hrvMs, let avg = avgHRV {
+                if let hrv = hrvMs, let avg = avgHRV {
                     Text(hrv >= avg ? "ABOVE BASELINE" : "BELOW BASELINE")
                         .font(.system(size: 9, weight: .bold))
                         .kerning(1)
@@ -235,11 +241,11 @@ struct HealthView: View {
                         .foregroundStyle(labelGray)
                 }
 
-                Text(latest?.restingHR.map { "\(Int($0)) BPM" } ?? "—")
+                Text(restingHR.map { "\(Int($0)) BPM" } ?? "—")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
 
-                if let hr = latest?.restingHR {
+                if let hr = restingHR {
                     let label = hr < 60 ? "ATHLETE RANGE" : hr < 80 ? "NORMAL RANGE" : "ELEVATED"
                     let color = hr < 60 ? accentTeal : hr < 80 ? accentBlue : Color(red: 1.0, green: 0.55, blue: 0.2)
                     Text(label)

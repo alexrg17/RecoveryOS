@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - SettingsView
 struct SettingsView: View {
@@ -14,10 +15,12 @@ struct SettingsView: View {
 
     @AppStorage("isLoggedIn")             private var isLoggedIn = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @ObservedObject private var healthKit = HealthKitManager.shared
 
     // Toggles (UI only)
     @State private var recoveryReminders = true
     @State private var biometricUnlock   = true
+    @State private var showHealthPermissionsSheet = false
 
     // Entrance animations
     @State private var profileOpacity: Double = 0
@@ -73,7 +76,157 @@ struct SettingsView: View {
             .background(bgPrimary)
             .toolbar(.hidden, for: .navigationBar)
             .onAppear { beginAnimations() }
+            .sheet(isPresented: $showHealthPermissionsSheet) {
+                healthPermissionsSheet
+            }
         }
+    }
+
+    // MARK: - Apple Health permissions sheet
+    private var healthPermissionsSheet: some View {
+        VStack(spacing: 0) {
+            // Handle bar
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.white.opacity(0.2))
+                .frame(width: 40, height: 4)
+                .padding(.top, 14)
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    // Icon + title
+                    VStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(red: 1.0, green: 0.25, blue: 0.35).opacity(0.15))
+                                .frame(width: 70, height: 70)
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(Color(red: 1.0, green: 0.25, blue: 0.35))
+                        }
+                        Text("Apple Health")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Text("CONNECTED")
+                            .font(.system(size: 10, weight: .bold))
+                            .kerning(1.2)
+                            .foregroundColor(accentTeal)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(accentTeal.opacity(0.12))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(accentTeal.opacity(0.3), lineWidth: 1))
+                    }
+                    .padding(.top, 20)
+
+                    // Active permissions
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("READING FROM HEALTH")
+                            .font(.system(size: 10, weight: .semibold))
+                            .kerning(1.5)
+                            .foregroundColor(Color.white.opacity(0.38))
+                            .padding(.leading, 4)
+
+                        VStack(spacing: 0) {
+                            permissionItem(icon: "moon.fill", color: Color(red: 0.55, green: 0.35, blue: 0.98), label: "Sleep Analysis")
+                            Divider().background(Color.white.opacity(0.06)).padding(.leading, 52)
+                            permissionItem(icon: "waveform.path.ecg", color: accentTeal, label: "Heart Rate Variability")
+                            Divider().background(Color.white.opacity(0.06)).padding(.leading, 52)
+                            permissionItem(icon: "heart.fill", color: Color(red: 1.0, green: 0.3, blue: 0.4), label: "Resting Heart Rate")
+                            Divider().background(Color.white.opacity(0.06)).padding(.leading, 52)
+                            permissionItem(icon: "bolt.fill", color: accentBlue, label: "Active Energy Burned")
+                        }
+                        .background(bgCard)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.06), lineWidth: 1))
+                    }
+
+                    // How to manage
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("TO MANAGE PERMISSIONS")
+                            .font(.system(size: 10, weight: .semibold))
+                            .kerning(1.5)
+                            .foregroundColor(Color.white.opacity(0.38))
+                            .padding(.leading, 4)
+
+                        VStack(spacing: 0) {
+                            manageStep(number: "1", text: "Tap \"Open Health App\" below")
+                            Divider().background(Color.white.opacity(0.06)).padding(.leading, 48)
+                            manageStep(number: "2", text: "Tap your profile picture (top right)")
+                            Divider().background(Color.white.opacity(0.06)).padding(.leading, 48)
+                            manageStep(number: "3", text: "Go to Privacy - Apps")
+                            Divider().background(Color.white.opacity(0.06)).padding(.leading, 48)
+                            manageStep(number: "4", text: "Select RecoveryOS to adjust access")
+                        }
+                        .background(bgCard)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.06), lineWidth: 1))
+                    }
+
+                    // Open button
+                    Button(action: {
+                        if let url = URL(string: "x-apple-health://") {
+                            UIApplication.shared.open(url)
+                        }
+                    }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "heart.text.square")
+                                .font(.system(size: 16))
+                            Text("Open Health App")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Color(red: 1.0, green: 0.25, blue: 0.35).opacity(0.85))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .padding(.bottom, 32)
+                }
+                .padding(.horizontal, 24)
+            }
+        }
+        .background(bgPrimary.ignoresSafeArea())
+    }
+
+    private func manageStep(number: String, text: String) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(accentBlue.opacity(0.15))
+                    .frame(width: 28, height: 28)
+                Text(number)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(accentBlue)
+            }
+            Text(text)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundColor(.white)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func permissionItem(icon: String, color: Color, label: String) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 32, height: 32)
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(color)
+            }
+            Text(label)
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundColor(.white)
+            Spacer()
+            Image(systemName: "checkmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(accentTeal)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Profile card
@@ -164,25 +317,37 @@ struct SettingsView: View {
     // MARK: - Connected Devices section
     private var connectedDevicesSection: some View {
         settingsSection(label: "CONNECTED DEVICES") {
-            HStack {
-                iconCircle("heart.fill", color: Color(red: 1.0, green: 0.25, blue: 0.35))
-                Text("Apple Health")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundColor(.white)
-                Spacer()
-                Text("CONNECTED")
-                    .font(.system(size: 10, weight: .bold))
-                    .kerning(0.8)
-                    .foregroundColor(accentTeal)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(accentTeal.opacity(0.12))
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(accentTeal.opacity(0.3), lineWidth: 1))
-                chevron
+            Button(action: handleAppleHealthTap) {
+                HStack {
+                    iconCircle("heart.fill", color: Color(red: 1.0, green: 0.25, blue: 0.35))
+                    Text("Apple Health")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundColor(.white)
+                    Spacer()
+                    let connected = healthKit.isAuthorized
+                    Text(connected ? "CONNECTED" : "NOT CONNECTED")
+                        .font(.system(size: 10, weight: .bold))
+                        .kerning(0.8)
+                        .foregroundColor(connected ? accentTeal : Color.white.opacity(0.35))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background((connected ? accentTeal : Color.white).opacity(0.08))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke((connected ? accentTeal : Color.white).opacity(0.2), lineWidth: 1))
+                    chevron
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 13)
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func handleAppleHealthTap() {
+        if healthKit.isAuthorized {
+            showHealthPermissionsSheet = true
+        } else {
+            HealthKitManager.shared.requestAuthorization()
         }
     }
 

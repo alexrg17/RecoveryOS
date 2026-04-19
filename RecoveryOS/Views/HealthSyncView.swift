@@ -399,6 +399,9 @@ struct HealthSyncView: View {
         NotificationManager.shared.requestPermission()
         NotificationManager.shared.scheduleDailyCheckInReminder()
 
+        // Request HealthKit authorisation
+        HealthKitManager.shared.requestAuthorization()
+
         callback()
     }
 
