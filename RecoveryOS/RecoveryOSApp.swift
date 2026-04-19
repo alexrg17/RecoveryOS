@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct RecoveryOSApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             DailyCheckIn.self,
@@ -24,10 +26,20 @@ struct RecoveryOSApp: App {
         }
     }()
 
+    init() {
+        NotificationManager.shared.requestPermission()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(HealthKitManager.shared)
         }
         .modelContainer(sharedModelContainer)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                HealthKitManager.shared.requestAuthorization()
+            }
+        }
     }
 }

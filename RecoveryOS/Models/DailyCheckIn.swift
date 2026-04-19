@@ -56,4 +56,27 @@ final class DailyCheckIn {
         self.workoutLoad = workoutLoad
         self.readinessScore = readinessScore
     }
+
+    /// Calculates a 0–100 recovery score from check-in inputs.
+    /// Soreness and stress are inverted (lower = better).
+    static func calculateScore(
+        soreness: Int, energy: Int, stress: Int,
+        hydration: Int, mood: Int,
+        sleepHours: Double? = nil
+    ) -> Int {
+        let s  = Double(10 - soreness) / 9.0  // invert: low soreness = good
+        let e  = Double(energy - 1)    / 9.0
+        let st = Double(10 - stress)   / 9.0  // invert: low stress = good
+        let h  = Double(hydration - 1) / 9.0
+        let m  = Double(mood - 1)      / 9.0
+
+        var score = s * 0.20 + e * 0.25 + st * 0.20 + h * 0.15 + m * 0.20
+
+        if let sleep = sleepHours {
+            let sleepNorm = min(sleep / 8.0, 1.0)  // 8h = perfect
+            score = score * 0.80 + sleepNorm * 0.20
+        }
+
+        return max(0, min(100, Int((score * 100).rounded())))
+    }
 }
