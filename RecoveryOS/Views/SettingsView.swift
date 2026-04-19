@@ -34,41 +34,46 @@ struct SettingsView: View {
     private let valueGray  = Color.white.opacity(0.45)
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 22) {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 22) {
 
-                // Page title
-                HStack {
-                    Text("Profile")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-
-                // Profile card
-                profileCard
+                    // Page title
+                    HStack {
+                        Text("Profile")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
                     .padding(.horizontal, 16)
-                    .opacity(profileOpacity)
-                    .scaleEffect(profileScale)
+                    .padding(.top, 16)
 
-                // Sections
-                VStack(spacing: 16) {
-                    accountSection
-                    recoveryPreferencesSection
-                    connectedDevicesSection
-                    privacySection
-                    signOutButton
-                    versionFooter
+                    // Profile card
+                    profileCard
+                        .padding(.horizontal, 16)
+                        .opacity(profileOpacity)
+                        .scaleEffect(profileScale)
+
+                    // Sections
+                    VStack(spacing: 16) {
+                        accountSection
+                        recoveryPreferencesSection
+                        connectedDevicesSection
+                        privacySection
+                        signOutButton
+                        versionFooter
+                    }
+                    .padding(.horizontal, 16)
+                    .opacity(sectionsOpacity)
+                    .offset(y: sectionsSlide)
                 }
-                .padding(.horizontal, 16)
-                .opacity(sectionsOpacity)
-                .offset(y: sectionsSlide)
+                .padding(.bottom, 20)
             }
-            .padding(.bottom, 20)
+            .scrollContentBackground(.hidden)
+            .background(bgPrimary)
+            .toolbar(.hidden, for: .navigationBar)
+            .onAppear { beginAnimations() }
         }
-        .onAppear { beginAnimations() }
     }
 
     // MARK: - Profile card
@@ -123,22 +128,34 @@ struct SettingsView: View {
     // MARK: - Account section
     private var accountSection: some View {
         settingsSection(label: "ACCOUNT") {
-            settingsRow(icon: "person", iconColor: accentBlue, title: "Profile")
+            navRow(icon: "person", iconColor: accentBlue, title: "Profile") {
+                EditProfileView()
+            }
             divider
-            settingsRow(icon: "envelope", iconColor: accentBlue, title: "Email", value: "m.holloway@pro.com")
+            navRow(icon: "envelope", iconColor: accentBlue, title: "Email", value: "m.holloway@pro.com") {
+                ChangeEmailView()
+            }
             divider
-            settingsRow(icon: "lock", iconColor: accentBlue, title: "Password")
+            navRow(icon: "lock", iconColor: accentBlue, title: "Password") {
+                ResetPasswordView()
+            }
         }
     }
 
     // MARK: - Recovery Preferences section
     private var recoveryPreferencesSection: some View {
         settingsSection(label: "RECOVERY PREFERENCES") {
-            settingsRow(icon: "figure.run", iconColor: accentTeal, title: "Training Goals", value: "Hyrox Pro")
+            navRow(icon: "figure.run", iconColor: accentTeal, title: "Training Goals", value: "Hyrox Pro") {
+                TrainingGoalsView()
+            }
             divider
-            settingsRow(icon: "moon", iconColor: Color(red: 0.55, green: 0.35, blue: 0.98), title: "Bedtime Target", value: "10:30 PM")
+            navRow(icon: "moon", iconColor: Color(red: 0.55, green: 0.35, blue: 0.98), title: "Bedtime Target", value: "10:30 PM") {
+                BedtimeTargetView()
+            }
             divider
-            settingsRow(icon: "drop", iconColor: Color(red: 0.3, green: 0.6, blue: 1.0), title: "Hydration Target", value: "4.2 Liters")
+            navRow(icon: "drop", iconColor: Color(red: 0.3, green: 0.6, blue: 1.0), title: "Hydration Target", value: "4.2 Liters") {
+                HydrationTargetView()
+            }
             divider
             toggleRow(icon: "bell", iconColor: Color(red: 1.0, green: 0.6, blue: 0.2), title: "Recovery Reminders", isOn: $recoveryReminders)
         }
@@ -174,7 +191,9 @@ struct SettingsView: View {
         settingsSection(label: "PRIVACY & SECURITY") {
             toggleRow(icon: "faceid", iconColor: accentBlue, title: "Biometric Unlock", isOn: $biometricUnlock)
             divider
-            settingsRow(icon: "shield", iconColor: accentBlue, title: "Data Sharing Policy")
+            navRow(icon: "shield", iconColor: accentBlue, title: "Data Sharing Policy") {
+                DataSharingPolicyView()
+            }
         }
     }
 
@@ -254,6 +273,28 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 13)
+    }
+
+    private func navRow<D: View>(icon: String, iconColor: Color, title: String, value: String? = nil, @ViewBuilder destination: () -> D) -> some View {
+        NavigationLink(destination: destination()) {
+            HStack {
+                iconCircle(icon, color: iconColor)
+                Text(title)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundColor(.white)
+                Spacer()
+                if let value {
+                    Text(value)
+                        .font(.system(size: 13))
+                        .foregroundColor(valueGray)
+                        .lineLimit(1)
+                }
+                chevron
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+        }
+        .buttonStyle(.plain)
     }
 
     private func toggleRow(icon: String, iconColor: Color, title: String, isOn: Binding<Bool>) -> some View {
