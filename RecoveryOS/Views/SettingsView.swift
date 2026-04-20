@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import Supabase
 
 // MARK: - SettingsView
 struct SettingsView: View {
@@ -365,10 +366,15 @@ struct SettingsView: View {
     // MARK: - Sign out button
     private var signOutButton: some View {
         Button(action: {
-            NotificationManager.shared.cancelAllNotifications()
-            isLoggedIn = false
-            hasCompletedOnboarding = false
-            onSignedOut()
+            Task {
+                try? await supabase.auth.signOut()
+                await MainActor.run {
+                    NotificationManager.shared.cancelAllNotifications()
+                    isLoggedIn             = false
+                    hasCompletedOnboarding = false
+                    onSignedOut()
+                }
+            }
         }) {
             HStack(spacing: 10) {
                 Image(systemName: "rectangle.portrait.and.arrow.right")

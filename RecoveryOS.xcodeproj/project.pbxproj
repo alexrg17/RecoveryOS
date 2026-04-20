@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		FA4453D12F96A0360066C2A4 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = FA4453D02F96A0360066C2A4 /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		FACF94772F68855B00CAF6D9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FA4453D12F96A0360066C2A4 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = RecoveryOS;
 			packageProductDependencies = (
+				FA4453D02F96A0360066C2A4 /* Supabase */,
 			);
 			productName = RecoveryOS;
 			productReference = FACF94672F68855800CAF6D9 /* RecoveryOS.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = FACF945E2F68855800CAF6D9;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FA4453CF2F96A0360066C2A4 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FACF94682F68855800CAF6D9 /* Products */;
 			projectDirPath = "";
@@ -395,11 +404,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RecoveryOS/RecoveryOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = B4D9M57F9H;
 				ENABLE_PREVIEWS = YES;
-				CODE_SIGN_ENTITLEMENTS = RecoveryOS/RecoveryOS.entitlements;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "RecoveryOS reads your health data to calculate your daily readiness score.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "RecoveryOS does not write to Apple Health.";
@@ -430,11 +439,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RecoveryOS/RecoveryOS.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = B4D9M57F9H;
 				ENABLE_PREVIEWS = YES;
-				CODE_SIGN_ENTITLEMENTS = RecoveryOS/RecoveryOS.entitlements;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "RecoveryOS reads your health data to calculate your daily readiness score.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "RecoveryOS does not write to Apple Health.";
@@ -584,6 +593,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		FA4453CF2F96A0360066C2A4 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FA4453D02F96A0360066C2A4 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA4453CF2F96A0360066C2A4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FACF945F2F68855800CAF6D9 /* Project object */;
 }

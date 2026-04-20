@@ -25,6 +25,10 @@ final class DailyCheckIn {
     var hrvMs: Double?
     var restingHR: Double?
     var workoutLoad: Double?
+    var activeCalories: Double?
+    var stepCount: Double?
+    var restingEnergy: Double?
+    var exerciseMinutes: Double?
 
     // Readiness score (0–100, calculated after check-in)
     var readinessScore: Int?
@@ -41,6 +45,10 @@ final class DailyCheckIn {
         hrvMs: Double? = nil,
         restingHR: Double? = nil,
         workoutLoad: Double? = nil,
+        activeCalories: Double? = nil,
+        stepCount: Double? = nil,
+        restingEnergy: Double? = nil,
+        exerciseMinutes: Double? = nil,
         readinessScore: Int? = nil
     ) {
         self.id = id
@@ -54,6 +62,10 @@ final class DailyCheckIn {
         self.hrvMs = hrvMs
         self.restingHR = restingHR
         self.workoutLoad = workoutLoad
+        self.activeCalories = activeCalories
+        self.stepCount = stepCount
+        self.restingEnergy = restingEnergy
+        self.exerciseMinutes = exerciseMinutes
         self.readinessScore = readinessScore
     }
 

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import Supabase
 
 // MARK: - App screens
 enum AppScreen {
@@ -82,10 +83,25 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.4), value: screen)
+        .task { await verifySession() }
     }
 
     private func transition(to next: AppScreen) {
         withAnimation(.easeInOut(duration: 0.4)) { screen = next }
+    }
+
+    // Checks if the stored Supabase session is still valid on every launch.
+    // If the token has expired the user is sent back to the welcome screen.
+    private func verifySession() async {
+        guard screen == .dashboard else { return }
+        do {
+            _ = try await supabase.auth.session
+        } catch {
+            await MainActor.run {
+                UserDefaults.standard.set(false, forKey: "isLoggedIn")
+                transition(to: .welcome)
+            }
+        }
     }
 }
 
