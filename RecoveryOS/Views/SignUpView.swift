@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import Supabase
 
 struct SignUpView: View {
 
@@ -404,13 +405,29 @@ struct SignUpView: View {
         withAnimation(.linear(duration: 0.6).repeatForever(autoreverses: false)) {
             spinnerAngle = 360
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-            isLoading    = false
-            spinnerAngle = 0
-            let profile  = UserProfile(name: fullName, email: email)
-            modelContext.insert(profile)
-            isLoggedIn   = true
-            onAccountCreated()
+
+        Task {
+            do {
+                try await supabase.auth.signUp(
+                    email: email,
+                    password: password,
+                    data: ["full_name": AnyJSON(fullName)]
+                )
+                await MainActor.run {
+                    isLoading    = false
+                    spinnerAngle = 0
+                    let profile  = UserProfile(name: fullName, email: email)
+                    modelContext.insert(profile)
+                    isLoggedIn   = true
+                    onAccountCreated()
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading    = false
+                    spinnerAngle = 0
+                    triggerError(error.localizedDescription)
+                }
+            }
         }
     }
 
