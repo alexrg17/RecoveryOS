@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Supabase
 
 struct LoginView: View {
 
@@ -343,12 +344,22 @@ struct LoginView: View {
             spinnerAngle = 360
         }
 
-        // Simulate auth delay then proceed
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            isLoading    = false
-            spinnerAngle = 0
-            isLoggedIn   = true
-            onSignedIn()
+        Task {
+            do {
+                try await supabase.auth.signIn(email: email, password: password)
+                await MainActor.run {
+                    isLoading    = false
+                    spinnerAngle = 0
+                    isLoggedIn   = true
+                    onSignedIn()
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading    = false
+                    spinnerAngle = 0
+                    triggerError(error.localizedDescription)
+                }
+            }
         }
     }
 
