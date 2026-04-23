@@ -1,10 +1,16 @@
 import SwiftUI
+import SwiftData
 
 struct TrainingGoalsView: View {
     // Persistence
     @AppStorage("trainingIntensityBias") private var intensityBias: String = "LIT"
     @AppStorage("dailyStrainTarget")    private var dailyStrain: Double = 6.0
     @AppStorage("autoRestDay")          private var autoRestDay: Bool = true
+
+    // SwiftData — keep UserProfile.intensity in sync
+    @Environment(\.modelContext) private var modelContext
+    @Query private var profiles: [UserProfile]
+    private var profile: UserProfile? { profiles.first }
 
     // UI state for segmented
     @State private var selectedBiasIndex: Int = 0 // 0 = LIT, 1 = HIT
@@ -65,9 +71,22 @@ struct TrainingGoalsView: View {
         .background(bgPrimary.ignoresSafeArea())
         .navigationTitle("Training Goals")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { selectedBiasIndex = intensityBias == "HIT" ? 1 : 0 }
+        .onAppear {
+            // If UserProfile has intensity data from onboarding, treat it as source of truth
+            if let profile {
+                let isHIT = profile.intensity >= 0.5
+                intensityBias     = isHIT ? "HIT" : "LIT"
+                selectedBiasIndex = isHIT ? 1 : 0
+            } else {
+                selectedBiasIndex = intensityBias == "HIT" ? 1 : 0
+            }
+        }
         .onChange(of: selectedBiasIndex) { _, newValue in
             intensityBias = newValue == 1 ? "HIT" : "LIT"
+            if let profile {
+                profile.intensity = newValue == 1 ? 1.0 : 0.0
+                try? modelContext.save()
+            }
         }
     }
 

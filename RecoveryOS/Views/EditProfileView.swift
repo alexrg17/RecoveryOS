@@ -15,6 +15,7 @@ struct EditProfileView: View {
 
     @State private var displayName: String = ""
     @State private var discipline: String  = "strength"
+    @State private var age: Double         = 25
 
     private let disciplines = [("strength", "Strength"), ("endurance", "Endurance")]
 
@@ -55,6 +56,24 @@ struct EditProfileView: View {
                     }
                 }
 
+                cardSection {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("AGE")
+                                .font(.system(size: 11, weight: .semibold))
+                                .kerning(1.2)
+                                .foregroundColor(labelGray)
+                            Spacer()
+                            Text("\(Int(age))")
+                                .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .monospacedDigit()
+                        }
+                        Slider(value: $age, in: 14...70, step: 1)
+                            .tint(accentBlue)
+                    }
+                }
+
                 Button(action: saveAndClose) {
                     Text("Save Changes")
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
@@ -73,6 +92,7 @@ struct EditProfileView: View {
         .onAppear {
             displayName = profile?.name ?? ""
             discipline  = profile?.discipline ?? "strength"
+            age         = Double(profile?.age ?? 25)
         }
     }
 
@@ -80,6 +100,7 @@ struct EditProfileView: View {
         if let profile {
             profile.name       = displayName.trimmingCharacters(in: .whitespaces)
             profile.discipline = discipline
+            profile.age        = Int(age)
             try? modelContext.save()
         }
         dismiss()
