@@ -16,6 +16,7 @@ struct HealthSyncView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var profiles: [UserProfile]
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("healthKitEnabled")       private var healthKitEnabled = false
 
     // Discipline selection
     @State private var selectedDiscipline: Discipline = .strength
@@ -255,7 +256,7 @@ struct HealthSyncView: View {
                     .offset(y: cardSlide)
 
                     // Sync button
-                    Button(action: { saveProfileAndFinish(then: onSynced) }) {
+                    Button(action: syncAndFinish) {
                         HStack(spacing: 10) {
                             Image(systemName: "gearshape.2.fill")
                                 .font(.system(size: 15))
@@ -282,7 +283,7 @@ struct HealthSyncView: View {
                     .opacity(buttonOpacity)
 
                     // Configure manually
-                    Button(action: { saveProfileAndFinish(then: onSkipped) }) {
+                    Button(action: skipAndFinish) {
                         Text("CONFIGURE MANUALLY")
                             .font(.system(size: 12, weight: .semibold))
                             .kerning(1)
@@ -385,7 +386,7 @@ struct HealthSyncView: View {
     }
 
     // MARK: - Persist onboarding data
-    private func saveProfileAndFinish(then callback: () -> Void) {
+    private func saveProfile() {
         let disciplineString = selectedDiscipline == .endurance ? "endurance" : "strength"
         if let profile = profiles.first {
             profile.discipline          = disciplineString
@@ -394,15 +395,21 @@ struct HealthSyncView: View {
             profile.onboardingCompleted = true
         }
         hasCompletedOnboarding = true
-
-        // Request notification permission and schedule daily 8am check-in reminder
         NotificationManager.shared.requestPermission()
         NotificationManager.shared.scheduleDailyCheckInReminder()
+    }
 
-        // Request HealthKit authorisation
+    private func syncAndFinish() {
+        saveProfile()
+        healthKitEnabled = true
         HealthKitManager.shared.requestAuthorization()
+        onSynced()
+    }
 
-        callback()
+    private func skipAndFinish() {
+        saveProfile()
+        healthKitEnabled = false
+        onSkipped()
     }
 
     // MARK: - Entrance animations

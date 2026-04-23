@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import Supabase
 
 struct LoginView: View {
@@ -14,6 +15,8 @@ struct LoginView: View {
     var onCreateAccount: () -> Void
 
     @AppStorage("isLoggedIn") private var isLoggedIn = false
+    @Environment(\.modelContext) private var modelContext
+    @Query private var profiles: [UserProfile]
 
     // Fields
     @State private var email           = ""
@@ -346,10 +349,18 @@ struct LoginView: View {
 
         Task {
             do {
-                try await supabase.auth.signIn(email: email, password: password)
+                let session = try await supabase.auth.signIn(email: email, password: password)
                 await MainActor.run {
                     isLoading    = false
                     spinnerAngle = 0
+                    // Create a local profile if none exists (e.g. signed out and back in)
+                    if profiles.isEmpty {
+                        let meta     = session.user.userMetadata
+                        let name: String
+                        if case .string(let n) = meta["full_name"] { name = n } else { name = "" }
+                        let profile  = UserProfile(name: name, email: session.user.email ?? email)
+                        modelContext.insert(profile)
+                    }
                     isLoggedIn   = true
                     onSignedIn()
                 }
@@ -357,10 +368,26 @@ struct LoginView: View {
                 await MainActor.run {
                     isLoading    = false
                     spinnerAngle = 0
-                    triggerError(error.localizedDescription)
+                    triggerError(friendlyAuthError(error))
                 }
             }
         }
+    }
+
+    private func friendlyAuthError(_ error: Error) -> String {
+        let msg = error.localizedDescription.lowercased()
+        if msg.contains("email not confirmed") || msg.contains("not confirmed") {
+            return "Please confirm your email before signing in. Check your inbox."
+        } else if msg.contains("invalid login") || msg.contains("invalid credentials") || msg.contains("wrong password") {
+            return "Incorrect email or password."
+        } else if msg.contains("user not found") || msg.contains("no user") {
+            return "No account found with that email."
+        } else if msg.contains("network") || msg.contains("connection") || msg.contains("offline") {
+            return "Connection error. Please check your internet."
+        } else if msg.contains("rate limit") || msg.contains("too many") {
+            return "Too many attempts. Please wait a moment and try again."
+        }
+        return "Sign in failed. Please try again."
     }
 
     private func triggerError(_ message: String) {

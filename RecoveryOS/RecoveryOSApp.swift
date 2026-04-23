@@ -37,7 +37,8 @@ struct RecoveryOSApp: App {
         }
         .modelContainer(sharedModelContainer)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            if phase == .active,
+               UserDefaults.standard.bool(forKey: "healthKitEnabled") {
                 HealthKitManager.shared.requestAuthorization()
             }
         }

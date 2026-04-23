@@ -63,7 +63,7 @@ struct BedtimeTargetView: View {
         .navigationTitle("Bedtime Target")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { tempDate = makeDate(hour: bedtimeHour, minute: bedtimeMinute) }
-        .onChange(of: tempDate) { newValue in
+        .onChange(of: tempDate) { _, newValue in
             let comps = Calendar.current.dateComponents([.hour, .minute], from: newValue)
             bedtimeHour   = comps.hour ?? 22
             bedtimeMinute = comps.minute ?? 0

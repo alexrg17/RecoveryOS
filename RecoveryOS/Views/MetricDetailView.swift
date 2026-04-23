@@ -246,6 +246,7 @@ struct MetricDetailView: View {
     }
 
     // MARK: - Chart
+    @ViewBuilder
     private var chartSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             if displayData.isEmpty {
@@ -262,41 +263,19 @@ struct MetricDetailView: View {
 
                 Chart {
                     ForEach(displayData, id: \.0) { date, value in
-                        if metric.useBarChart {
-                            BarMark(x: .value("Date", date, unit: .day), y: .value(metric.title, value))
-                                .foregroundStyle(
-                                    selectedEntry?.0 == date
-                                        ? metric.accentColor
-                                        : metric.accentColor.opacity(selectedEntry == nil ? 0.75 : 0.3)
-                                )
-                                .cornerRadius(4)
-                        } else {
-                            AreaMark(x: .value("Date", date), y: .value(metric.title, value))
-                                .foregroundStyle(LinearGradient(
-                                    colors: [metric.accentColor.opacity(0.3), .clear],
-                                    startPoint: .top, endPoint: .bottom
-                                ))
-                            LineMark(x: .value("Date", date), y: .value(metric.title, value))
-                                .foregroundStyle(metric.accentColor)
-                                .lineStyle(StrokeStyle(lineWidth: 2.5))
-                            PointMark(x: .value("Date", date), y: .value(metric.title, value))
-                                .foregroundStyle(selectedEntry?.0 == date ? .white : metric.accentColor)
-                                .symbolSize(selectedEntry?.0 == date ? 80 : 24)
-                        }
+                        chartContent(date: date, value: value)
                     }
-
                     if let (selDate, selValue) = selectedEntry {
                         RuleMark(x: .value("Selected", selDate))
                             .foregroundStyle(Color.white.opacity(0.25))
                             .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4]))
                         PointMark(x: .value("Date", selDate), y: .value(metric.title, selValue))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.white)
                             .symbolSize(100)
                             .annotation(position: .top, spacing: 6) {
                                 callout(date: selDate, value: selValue)
                             }
                     }
-
                     if let a = avg, !metric.useBarChart {
                         RuleMark(y: .value("Avg", a))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
@@ -329,7 +308,8 @@ struct MetricDetailView: View {
                             .gesture(
                                 DragGesture(minimumDistance: 0)
                                     .onChanged { drag in
-                                        let x = drag.location.x - geo[proxy.plotAreaFrame].origin.x
+                                        guard let plotAnchor = proxy.plotFrame else { return }
+                                        let x = drag.location.x - geo[plotAnchor].origin.x
                                         guard x >= 0 else { return }
                                         if let date: Date = proxy.value(atX: x) {
                                             if let nearest = displayData.min(by: {
@@ -356,6 +336,30 @@ struct MetricDetailView: View {
         .padding(16)
         .background(bgCard)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    @ChartContentBuilder
+    private func chartContent(date: Date, value: Double) -> some ChartContent {
+        if metric.useBarChart {
+            let isSelected = selectedEntry?.0 == date
+            let opacity: Double = isSelected ? 1.0 : (selectedEntry == nil ? 0.75 : 0.3)
+            BarMark(x: .value("Date", date, unit: .day), y: .value(metric.title, value))
+                .foregroundStyle(metric.accentColor.opacity(opacity))
+                .cornerRadius(4)
+        } else {
+            let isSelected = selectedEntry?.0 == date
+            AreaMark(x: .value("Date", date), y: .value(metric.title, value))
+                .foregroundStyle(LinearGradient(
+                    colors: [metric.accentColor.opacity(0.3), .clear],
+                    startPoint: .top, endPoint: .bottom
+                ))
+            LineMark(x: .value("Date", date), y: .value(metric.title, value))
+                .foregroundStyle(metric.accentColor)
+                .lineStyle(StrokeStyle(lineWidth: 2.5))
+            PointMark(x: .value("Date", date), y: .value(metric.title, value))
+                .foregroundStyle(isSelected ? Color.white : metric.accentColor)
+                .symbolSize(isSelected ? 80 : 24)
+        }
     }
 
     private func callout(date: Date, value: Double) -> some View {

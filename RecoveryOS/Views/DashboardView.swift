@@ -380,7 +380,7 @@ struct DashboardView: View {
     // MARK: AI insight card
     private var aiInsightCard: some View {
         Group {
-            Text(insight.label + " ")
+            Text("\(insight.label) ")
                 .foregroundStyle(accentBlue)
                 .fontWeight(.semibold)
             + Text(insight.body)

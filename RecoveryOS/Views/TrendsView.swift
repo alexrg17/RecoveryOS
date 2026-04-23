@@ -334,7 +334,8 @@ struct TrendsView: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { drag in
-                            let x = drag.location.x - geo[proxy.plotAreaFrame].origin.x
+                            guard let plotAnchor = proxy.plotFrame else { return }
+                            let x = drag.location.x - geo[plotAnchor].origin.x
                             guard x >= 0 else { return }
                             withAnimation(.easeInOut(duration: 0.08)) { onChanged(x) }
                         }
