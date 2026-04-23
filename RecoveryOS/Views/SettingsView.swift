@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import UIKit
 import Supabase
 
@@ -16,7 +17,20 @@ struct SettingsView: View {
 
     @AppStorage("isLoggedIn")             private var isLoggedIn = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("healthKitEnabled")       private var healthKitEnabled = false
     @ObservedObject private var healthKit = HealthKitManager.shared
+    @Environment(\.modelContext) private var modelContext
+    @Query private var profiles: [UserProfile]
+    @Query private var checkIns: [DailyCheckIn]
+
+    private var profile: UserProfile? { profiles.first }
+
+    // AppStorage — mirrors keys used in the destination preference views
+    @AppStorage("bedtimeHour")           private var bedtimeHour: Int = 22
+    @AppStorage("bedtimeMinute")         private var bedtimeMinute: Int = 30
+    @AppStorage("hydrationTargetLiters") private var hydrationTargetLiters: Double = 2.5
+    @AppStorage("hydrationUnit")         private var hydrationUnit: String = "L"
+    @AppStorage("trainingIntensityBias") private var trainingIntensityBias: String = "LIT"
 
     // Toggles (UI only)
     @State private var recoveryReminders = true
@@ -36,6 +50,25 @@ struct SettingsView: View {
     private let accentTeal = Color(red: 0.25, green: 0.90, blue: 0.69)
     private let labelGray  = Color.white.opacity(0.38)
     private let valueGray  = Color.white.opacity(0.45)
+
+    // MARK: - Preference display helpers
+    private var bedtimeLabel: String {
+        let hour12 = bedtimeHour % 12 == 0 ? 12 : bedtimeHour % 12
+        let ampm   = bedtimeHour < 12 ? "AM" : "PM"
+        return String(format: "%d:%02d %@", hour12, bedtimeMinute, ampm)
+    }
+
+    private var hydrationLabel: String {
+        if hydrationUnit == "L" {
+            return String(format: "%.1f L", hydrationTargetLiters)
+        }
+        let oz = hydrationTargetLiters * 33.814
+        return String(format: "%.0f fl oz", oz)
+    }
+
+    private var trainingGoalsLabel: String {
+        trainingIntensityBias == "HIT" ? "High Intensity" : "Low Intensity"
+    }
 
     var body: some View {
         NavigationStack {
@@ -255,11 +288,17 @@ struct SettingsView: View {
                     .offset(x: 2, y: 2)
             }
 
-            Text("Marcus Holloway")
+            Text(profile?.name.isEmpty == false ? profile!.name : "Athlete")
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
 
-            Text("ELITE PERFORMER")
+            if let age = profile?.age, age > 0 {
+                Text("Age \(age)")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.45))
+            }
+
+            Text(disciplineBadge)
                 .font(.system(size: 10, weight: .bold))
                 .kerning(1.5)
                 .foregroundColor(accentBlue)
@@ -286,7 +325,7 @@ struct SettingsView: View {
                 EditProfileView()
             }
             divider
-            navRow(icon: "envelope", iconColor: accentBlue, title: "Email", value: "m.holloway@pro.com") {
+            navRow(icon: "envelope", iconColor: accentBlue, title: "Email", value: profile?.email ?? "") {
                 ChangeEmailView()
             }
             divider
@@ -299,15 +338,15 @@ struct SettingsView: View {
     // MARK: - Recovery Preferences section
     private var recoveryPreferencesSection: some View {
         settingsSection(label: "RECOVERY PREFERENCES") {
-            navRow(icon: "figure.run", iconColor: accentTeal, title: "Training Goals", value: "Hyrox Pro") {
+            navRow(icon: "figure.run", iconColor: accentTeal, title: "Training Goals", value: trainingGoalsLabel) {
                 TrainingGoalsView()
             }
             divider
-            navRow(icon: "moon", iconColor: Color(red: 0.55, green: 0.35, blue: 0.98), title: "Bedtime Target", value: "10:30 PM") {
+            navRow(icon: "moon", iconColor: Color(red: 0.55, green: 0.35, blue: 0.98), title: "Bedtime Target", value: bedtimeLabel) {
                 BedtimeTargetView()
             }
             divider
-            navRow(icon: "drop", iconColor: Color(red: 0.3, green: 0.6, blue: 1.0), title: "Hydration Target", value: "4.2 Liters") {
+            navRow(icon: "drop", iconColor: Color(red: 0.3, green: 0.6, blue: 1.0), title: "Hydration Target", value: hydrationLabel) {
                 HydrationTargetView()
             }
             divider
@@ -325,7 +364,7 @@ struct SettingsView: View {
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundColor(.white)
                     Spacer()
-                    let connected = healthKit.isAuthorized
+                    let connected = healthKitEnabled && healthKit.isAuthorized
                     Text(connected ? "CONNECTED" : "NOT CONNECTED")
                         .font(.system(size: 10, weight: .bold))
                         .kerning(0.8)
@@ -345,9 +384,10 @@ struct SettingsView: View {
     }
 
     private func handleAppleHealthTap() {
-        if healthKit.isAuthorized {
+        if healthKitEnabled && healthKit.isAuthorized {
             showHealthPermissionsSheet = true
         } else {
+            healthKitEnabled = true
             HealthKitManager.shared.requestAuthorization()
         }
     }
@@ -363,15 +403,29 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Helpers
+    private var disciplineBadge: String {
+        switch profile?.discipline {
+        case "endurance": return "ENDURANCE ATHLETE"
+        case "strength":  return "STRENGTH ATHLETE"
+        default:          return "ATHLETE"
+        }
+    }
+
     // MARK: - Sign out button
     private var signOutButton: some View {
         Button(action: {
             Task {
                 try? await supabase.auth.signOut()
                 await MainActor.run {
+                    // Clear all local data so next user starts fresh
+                    profiles.forEach { modelContext.delete($0) }
+                    checkIns.forEach  { modelContext.delete($0) }
+                    try? modelContext.save()
                     NotificationManager.shared.cancelAllNotifications()
                     isLoggedIn             = false
                     hasCompletedOnboarding = false
+                    healthKitEnabled       = false
                     onSignedOut()
                 }
             }
