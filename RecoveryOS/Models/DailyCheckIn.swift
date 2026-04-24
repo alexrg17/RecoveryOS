@@ -30,6 +30,9 @@ final class DailyCheckIn {
     var restingEnergy: Double?
     var exerciseMinutes: Double?
 
+    // Nutrition adherence (1–10 scale, logged daily)
+    var nutritionAdherence: Int
+
     // Readiness score (0–100, calculated after check-in)
     var readinessScore: Int?
 
@@ -41,6 +44,7 @@ final class DailyCheckIn {
         stress: Int = 5,
         hydration: Int = 5,
         mood: Int = 5,
+        nutritionAdherence: Int = 5,
         sleepHours: Double? = nil,
         hrvMs: Double? = nil,
         restingHR: Double? = nil,
@@ -58,6 +62,7 @@ final class DailyCheckIn {
         self.stress = stress
         self.hydration = hydration
         self.mood = mood
+        self.nutritionAdherence = nutritionAdherence
         self.sleepHours = sleepHours
         self.hrvMs = hrvMs
         self.restingHR = restingHR

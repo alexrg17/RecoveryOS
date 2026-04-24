@@ -16,11 +16,12 @@ struct CheckInView: View {
     @Environment(\.dismiss) private var dismiss
 
     // Sliders (1-10)
-    @State private var soreness:  Double = 5
-    @State private var energy:    Double = 5
-    @State private var stress:    Double = 5
-    @State private var hydration: Double = 5
-    @State private var mood:      Double = 5
+    @State private var soreness:           Double = 5
+    @State private var energy:             Double = 5
+    @State private var stress:             Double = 5
+    @State private var hydration:          Double = 5
+    @State private var mood:               Double = 5
+    @State private var nutritionAdherence: Double = 5
 
     // Biometric fields - pre-filled from HealthKit if available
     @State private var sleepHoursText: String
@@ -33,7 +34,7 @@ struct CheckInView: View {
         _sleepHoursText = State(initialValue: prefill?.sleepHours.map { String(format: "%.1f", $0) } ?? "")
         _hrvText        = State(initialValue: prefill?.hrvMs.map      { String(format: "%.0f", $0) } ?? "")
         _restingHRText  = State(initialValue: prefill?.restingHR.map  { String(format: "%.0f", $0) } ?? "")
-        _workoutLoad    = State(initialValue: prefill?.workoutLoad ?? 5)
+        _workoutLoad    = State(initialValue: prefill.flatMap(\.workoutLoad) ?? 5)
     }
 
     // Design tokens
@@ -65,11 +66,12 @@ struct CheckInView: View {
                         VStack(spacing: 0) {
                             sectionHeader("WELLBEING")
                             VStack(spacing: 12) {
-                                sliderRow(label: "Soreness",  value: $soreness,  invert: true)
-                                sliderRow(label: "Energy",    value: $energy,    invert: false)
-                                sliderRow(label: "Stress",    value: $stress,    invert: true)
-                                sliderRow(label: "Hydration", value: $hydration, invert: false)
-                                sliderRow(label: "Mood",      value: $mood,      invert: false)
+                                sliderRow(label: "Soreness",    value: $soreness,           invert: true)
+                                sliderRow(label: "Energy",      value: $energy,             invert: false)
+                                sliderRow(label: "Stress",      value: $stress,             invert: true)
+                                sliderRow(label: "Hydration",   value: $hydration,          invert: false)
+                                sliderRow(label: "Mood",        value: $mood,               invert: false)
+                                sliderRow(label: "Nutrition",   value: $nutritionAdherence, invert: false)
                             }
                             .padding(16)
                             .background(bgCard)
@@ -206,16 +208,17 @@ struct CheckInView: View {
         )
 
         let checkIn = DailyCheckIn(
-            soreness:       Int(soreness),
-            energy:         Int(energy),
-            stress:         Int(stress),
-            hydration:      Int(hydration),
-            mood:           Int(mood),
-            sleepHours:     Double(sleepHoursText),
-            hrvMs:          Double(hrvText),
-            restingHR:      Double(restingHRText),
-            workoutLoad:    workoutLoad,
-            readinessScore: score
+            soreness:           Int(soreness),
+            energy:             Int(energy),
+            stress:             Int(stress),
+            hydration:          Int(hydration),
+            mood:               Int(mood),
+            nutritionAdherence: Int(nutritionAdherence),
+            sleepHours:         Double(sleepHoursText),
+            hrvMs:              Double(hrvText),
+            restingHR:          Double(restingHRText),
+            workoutLoad:        workoutLoad,
+            readinessScore:     score
         )
         modelContext.insert(checkIn)
         NotificationManager.shared.scheduleRecoveryAlertIfNeeded(score: score)

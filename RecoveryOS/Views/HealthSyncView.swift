@@ -82,7 +82,7 @@ struct HealthSyncView: View {
                         Spacer()
 
                         HStack(spacing: 10) {
-                            Text("STEP 02/03")
+                            Text("STEP 02/04")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(.white.opacity(0.35))
 

@@ -94,6 +94,7 @@ struct SettingsView: View {
                     // Sections
                     VStack(spacing: 16) {
                         accountSection
+                        athleteProfileSection
                         recoveryPreferencesSection
                         connectedDevicesSection
                         privacySection
@@ -332,6 +333,25 @@ struct SettingsView: View {
             navRow(icon: "lock", iconColor: accentBlue, title: "Password") {
                 ResetPasswordView()
             }
+        }
+    }
+
+    // MARK: - Athlete Profile section
+    private var athleteProfileSection: some View {
+        settingsSection(label: "ATHLETE PROFILE") {
+            navRow(icon: "target", iconColor: accentTeal, title: "Goals & Body Stats",
+                   value: profile.map { goalLabel($0.fitnessGoal) } ?? "") {
+                EditGoalsView()
+            }
+        }
+    }
+
+    private func goalLabel(_ key: String) -> String {
+        switch key {
+        case "fat_loss":      return "Fat Loss"
+        case "muscle_gain":   return "Muscle Gain"
+        case "performance":   return "Performance"
+        default:              return "General Health"
         }
     }
 

@@ -22,7 +22,18 @@ struct RecoveryOSApp: App {
         do {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            // Schema changed — wipe the local store and start fresh
+            let storeURL = modelConfiguration.url
+            let shmURL   = storeURL.deletingPathExtension().appendingPathExtension("store-shm")
+            let walURL   = storeURL.deletingPathExtension().appendingPathExtension("store-wal")
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: shmURL)
+            try? FileManager.default.removeItem(at: walURL)
+            do {
+                return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            } catch {
+                fatalError("Could not create ModelContainer: \(error)")
+            }
         }
     }()
 

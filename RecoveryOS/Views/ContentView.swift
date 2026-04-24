@@ -11,7 +11,7 @@ import Supabase
 
 // MARK: - App screens
 enum AppScreen {
-    case welcome, login, signUp, onboarding, healthSync, dashboard
+    case welcome, login, signUp, onboarding, healthSync, goalsSetup, dashboard
 }
 
 struct ContentView: View {
@@ -69,13 +69,20 @@ struct ContentView: View {
 
             case .healthSync:
                 HealthSyncView(
-                    onSynced:   { transition(to: .dashboard) },
-                    onSkipped:  { transition(to: .dashboard) }
+                    onSynced:   { transition(to: .goalsSetup) },
+                    onSkipped:  { transition(to: .goalsSetup) }
                 )
                 .transition(.asymmetric(
                     insertion:  .move(edge: .trailing).combined(with: .opacity),
                     removal:    .move(edge: .leading).combined(with: .opacity)
                 ))
+
+            case .goalsSetup:
+                GoalsSetupView(onFinished: { transition(to: .dashboard) })
+                    .transition(.asymmetric(
+                        insertion:  .move(edge: .trailing).combined(with: .opacity),
+                        removal:    .move(edge: .leading).combined(with: .opacity)
+                    ))
 
             case .dashboard:
                 DashboardView(onSignedOut: { transition(to: .welcome) })
