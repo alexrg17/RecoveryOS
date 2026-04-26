@@ -5,17 +5,25 @@
 
 import UserNotifications
 
+// Singleton so there is one consistent notification queue across the whole app.
+// Making init() private prevents accidental extra instances being created elsewhere.
 final class NotificationManager {
     static let shared = NotificationManager()
     private init() {}
 
     // MARK: - Permission
+
+    // Called once at app launch. The result is ignored here because the OS
+    // remembers the user's choice and we check isAuthorized before scheduling.
     func requestPermission() {
         UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
-    // MARK: - Daily 8am check-in reminder (production)
+    // MARK: - Daily 8am check-in reminder
+
+    // Removes any previously scheduled version of this reminder before adding a new one
+    // so we never end up with duplicate notifications if the user changes their settings.
     func scheduleDailyCheckInReminder() {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: ["daily-checkin"])
@@ -25,6 +33,8 @@ final class NotificationManager {
         content.body      = "Log your recovery metrics and get today's readiness score."
         content.sound     = .default
 
+        // Fire at 8:00 am every day. UNCalendarNotificationTrigger with repeats: true
+        // handles daylight saving changes automatically.
         var components    = DateComponents()
         components.hour   = 8
         components.minute = 0
@@ -36,7 +46,12 @@ final class NotificationManager {
         center.add(request)
     }
 
-    // MARK: - Low recovery alert after check-in (production)
+    // MARK: - Low recovery alert
+
+    // Only fires when the score is genuinely low (below 50) because alerting
+    // for moderate fatigue would desensitise the user and they would start ignoring it.
+    // A unique ID based on the current timestamp prevents this from overwriting
+    // any other pending notification of the same type.
     func scheduleRecoveryAlertIfNeeded(score: Int) {
         guard score < 50 else { return }
         send(
@@ -47,7 +62,10 @@ final class NotificationManager {
         )
     }
 
-    // MARK: - On-demand demo notifications (fires after 5 s)
+    // MARK: - Demo notifications
+
+    // The demo enum lets us trigger each notification type from the UI for
+    // presentation and testing without having to wait for real conditions to occur.
     enum DemoNotification: String, CaseIterable {
         case checkIn      = "Check-In Reminder"
         case lowRecovery  = "Low Recovery Alert"
@@ -83,16 +101,22 @@ final class NotificationManager {
         }
     }
 
+    // Fires the chosen demo notification after a 5 second delay so the user has time
+    // to press the home button and actually see it arrive on the lock screen.
     func sendDemo(_ type: DemoNotification) {
         send(id: "demo-\(type.rawValue)", title: type.title, body: type.body, delay: 5)
     }
 
     // MARK: - Cancel all
+
     func cancelAllNotifications() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
 
     // MARK: - Private helper
+
+    // Shared sending logic to avoid duplicating the content/trigger setup
+    // in every method above.
     private func send(id: String, title: String, body: String, delay: TimeInterval) {
         let content   = UNMutableNotificationContent()
         content.title = title

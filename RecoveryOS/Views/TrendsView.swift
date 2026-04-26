@@ -8,15 +8,22 @@
 import SwiftUI
 import Charts
 
+// Shows recovery score, sleep, and HRV trends over 7 or 30 days.
+// Each chart supports drag-to-scrub so the user can inspect individual data points
+// without tapping, which keeps the interaction gesture-based throughout.
 struct TrendsView: View {
+    // checkIns is passed in from DashboardView which already has the @Query result.
+    // This avoids running a duplicate query and keeps this view simpler.
     let checkIns: [DailyCheckIn]
 
     @State private var selectedPeriod = 7
 
-    // Per-chart selection state for scrubbing
-    @State private var scoreSelection:    (Date, Int)?    = nil
-    @State private var sleepSelection:    (Date, Double)? = nil
-    @State private var hrvSelection:      (Date, Double)? = nil
+    // Each chart tracks its own selected point independently so scrubbing one chart
+    // does not affect the others. Tuples store both the date and value together
+    // so the callout bubble can display both pieces of information at once.
+    @State private var scoreSelection: (Date, Int)?    = nil
+    @State private var sleepSelection: (Date, Double)? = nil
+    @State private var hrvSelection:   (Date, Double)? = nil
 
     private let bgCard       = Color(red: 0.09, green: 0.09, blue: 0.13)
     private let accentBlue   = Color(red: 0.28, green: 0.48, blue: 0.98)
@@ -24,6 +31,8 @@ struct TrendsView: View {
     private let accentPurple = Color(red: 0.55, green: 0.35, blue: 0.98)
     private let labelGray    = Color.white.opacity(0.45)
 
+    // Takes the most recent N check-ins and reverses them so the chart reads
+    // left to right chronologically, with the oldest date on the left.
     private var displayData: [DailyCheckIn] {
         Array(checkIns.prefix(selectedPeriod).reversed())
     }
@@ -60,6 +69,8 @@ struct TrendsView: View {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             selectedPeriod = period
+                            // Clear all scrub selections when switching period so the
+                            // callout bubbles from the previous period do not persist.
                             scoreSelection = nil
                             sleepSelection = nil
                             hrvSelection   = nil
@@ -102,11 +113,14 @@ struct TrendsView: View {
 
     // MARK: - Recovery score chart
     private var recoveryChart: some View {
+        // compactMap filters out check-ins that have no readiness score yet,
+        // which can happen if the record was inserted before the score was calculated.
         let data = displayData.compactMap { ci -> (Date, Int)? in
             guard let s = ci.readinessScore else { return nil }
             return (ci.date, s)
         }
         let avg = data.isEmpty ? 0 : data.map(\.1).reduce(0, +) / data.count
+        // When nothing is scrubbed, show the period average as a useful default summary.
         let summaryValue = scoreSelection.map { "\($0.1)" } ?? (data.isEmpty ? nil : "Avg \(avg)")
 
         return chartCard(
@@ -222,6 +236,9 @@ struct TrendsView: View {
     }
 
     // MARK: - HRV chart
+    // The HRV chart is only shown when at least one check-in has HRV data logged,
+    // checked in the parent VStack. This avoids displaying an empty placeholder
+    // for users who have not granted Apple Watch heart rate permission.
     private var hrvChart: some View {
         let data = displayData.compactMap { ci -> (Date, Double)? in
             guard let h = ci.hrvMs else { return nil }
@@ -322,6 +339,13 @@ struct TrendsView: View {
     }
 
     // MARK: - Shared scrub overlay
+
+    // A transparent rectangle is laid on top of the chart so the whole area is
+    // draggable, not just the data points. minimumDistance: 0 means the gesture
+    // fires immediately on touch rather than waiting for movement, which makes
+    // the scrubbing feel responsive.
+    // proxy.plotFrame gives us the exact rect of the chart's data area so we can
+    // subtract the left edge and get an x coordinate relative to the data, not the card.
     private func scrubOverlay(
         proxy: ChartProxy,
         onChanged: @escaping (CGFloat) -> Void,
@@ -336,10 +360,14 @@ struct TrendsView: View {
                         .onChanged { drag in
                             guard let plotAnchor = proxy.plotFrame else { return }
                             let x = drag.location.x - geo[plotAnchor].origin.x
+                            // Ignore coordinates to the left of the plot area to avoid
+                            // the selected point jumping to the wrong data entry.
                             guard x >= 0 else { return }
                             withAnimation(.easeInOut(duration: 0.08)) { onChanged(x) }
                         }
                         .onEnded { _ in
+                            // Fade the selection out slowly so the user can see where
+                            // they last touched before the callout disappears.
                             withAnimation(.easeOut(duration: 0.4)) { onEnd() }
                         }
                 )

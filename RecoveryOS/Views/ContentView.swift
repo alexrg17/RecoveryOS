@@ -9,7 +9,9 @@ import SwiftUI
 import SwiftData
 import Supabase
 
-// MARK: - App screens
+// All possible screens the app can show, used to drive navigation from a single
+// state variable rather than pushing/popping a navigation stack. This makes it
+// straightforward to jump directly to any screen from anywhere in the app.
 enum AppScreen {
     case welcome, login, signUp, onboarding, healthSync, goalsSetup, dashboard
 }
@@ -18,15 +20,22 @@ struct ContentView: View {
     @State private var screen: AppScreen
 
     @Environment(\.modelContext) private var modelContext
+    // These queries let ContentView sync cloud data into SwiftData on launch
+    // without needing to pass a context down through multiple view layers.
     @Query private var profiles: [UserProfile]
     @Query private var checkIns: [DailyCheckIn]
 
     init() {
+        // Decide the starting screen before the view appears so there is no
+        // visible flash between the welcome screen and the dashboard on relaunch.
+        // UserDefaults is used here rather than SwiftData because @Query results
+        // are not available inside init().
         let loggedIn  = UserDefaults.standard.bool(forKey: "isLoggedIn")
         let onboarded = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         if loggedIn && onboarded {
             _screen = State(initialValue: .dashboard)
         } else if loggedIn {
+            // User signed in previously but never finished onboarding, so send them back.
             _screen = State(initialValue: .onboarding)
         } else {
             _screen = State(initialValue: .welcome)
@@ -34,14 +43,18 @@ struct ContentView: View {
     }
 
     var body: some View {
+        // ZStack is used instead of NavigationStack because we need full control
+        // over transitions and want to be able to jump back to welcome from anywhere
+        // without unwinding a navigation hierarchy.
         ZStack {
             switch screen {
 
             case .welcome:
                 WelcomeView(
-                    onGetStarted: { transition(to: .signUp)  },
-                    onSignIn:     { transition(to: .login)   }
+                    onGetStarted: { transition(to: .signUp) },
+                    onSignIn:     { transition(to: .login)  }
                 )
+                // Simple fade for the root screen since there is no "direction" to convey.
                 .transition(.opacity)
 
             case .login:
@@ -49,6 +62,8 @@ struct ContentView: View {
                     onSignedIn:      { transitionToDashboard() },
                     onCreateAccount: { transition(to: .signUp) }
                 )
+                // Slides in from the right and exits to the left to give a sense of
+                // moving forward through a linear flow.
                 .transition(.asymmetric(
                     insertion:  .move(edge: .trailing).combined(with: .opacity),
                     removal:    .move(edge: .leading).combined(with: .opacity)
@@ -57,7 +72,7 @@ struct ContentView: View {
             case .signUp:
                 SignUpView(
                     onAccountCreated: { transition(to: .onboarding) },
-                    onSignIn:         { transition(to: .login)       }
+                    onSignIn:         { transition(to: .login) }
                 )
                 .transition(.asymmetric(
                     insertion:  .move(edge: .trailing).combined(with: .opacity),
@@ -73,8 +88,8 @@ struct ContentView: View {
 
             case .healthSync:
                 HealthSyncView(
-                    onSynced:   { transition(to: .goalsSetup) },
-                    onSkipped:  { transition(to: .goalsSetup) }
+                    onSynced:  { transition(to: .goalsSetup) },
+                    onSkipped: { transition(to: .goalsSetup) }
                 )
                 .transition(.asymmetric(
                     insertion:  .move(edge: .trailing).combined(with: .opacity),
@@ -90,10 +105,14 @@ struct ContentView: View {
 
             case .dashboard:
                 DashboardView(onSignedOut: { transition(to: .welcome) })
+                    // Fade rather than slide for the dashboard because it is not part
+                    // of the onboarding sequence and the direction would be ambiguous.
                     .transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: 0.4), value: screen)
+        // Check the Supabase session token is still valid every time the app launches.
+        // This catches expired sessions without waiting for the user to try an action.
         .task { await verifySession() }
     }
 
@@ -103,7 +122,9 @@ struct ContentView: View {
         withAnimation(.easeInOut(duration: 0.4)) { screen = next }
     }
 
-    /// Called specifically when signing in — navigates to dashboard and restores cloud data.
+    // Navigates to the dashboard and immediately kicks off a cloud sync in the background.
+    // Doing both together means the dashboard data is as fresh as possible by the time
+    // the user starts interacting with it.
     private func transitionToDashboard() {
         transition(to: .dashboard)
         Task { await restoreUserData() }
@@ -111,9 +132,9 @@ struct ContentView: View {
 
     // MARK: - Session verification
 
-    /// Checks if the stored Supabase session is still valid on every launch.
-    /// If valid, also restores any cloud data that may be missing locally.
-    /// If the token has expired the user is sent back to the welcome screen.
+    // Supabase JWT tokens expire after a set period. Trying to fetch the session
+    // throws an error when it has expired, which we use as the signal to log out.
+    // This prevents the app getting stuck on the dashboard with an invalid token.
     private func verifySession() async {
         guard screen == .dashboard else { return }
         do {
@@ -129,9 +150,9 @@ struct ContentView: View {
 
     // MARK: - Cloud data restore
 
-    /// Fetches the user's profile, check-ins, and preferences from Supabase
-    /// and merges them into the local SwiftData store / UserDefaults.
-    /// Safe to call repeatedly — only inserts records that are missing locally.
+    // Pulls the user's profile, check-ins, and preferences from Supabase and
+    // merges them into the local SwiftData store. Safe to call on every launch
+    // because it checks for existing records before inserting new ones.
     private func restoreUserData() async {
         do {
             // ── Profile ───────────────────────────────────────────────────────

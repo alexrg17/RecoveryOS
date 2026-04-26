@@ -8,7 +8,9 @@ import Combine
 import HealthKit
 import SwiftData
 
-// MARK: - Snapshot of today's HealthKit data
+// A lightweight struct that holds a single day's worth of Apple Health readings.
+// All fields are optional because any one of them could be unavailable depending
+// on what the user's Apple Watch has recorded and whether they granted permission.
 struct HealthKitSnapshot {
     var sleepHours: Double?
     var hrvMs: Double?
@@ -21,7 +23,8 @@ struct HealthKitSnapshot {
     var sleepSession: SleepSession?
 }
 
-// MARK: - Sleep stage modeling
+// Maps Apple Health's internal integer stage codes to named cases that are
+// easier to reason about in the rest of the codebase.
 enum SleepStage: Int, CaseIterable, Identifiable {
     case inBed, awake, rem, core, deep, asleepUnspecified
     var id: Int { rawValue }
@@ -37,6 +40,8 @@ enum SleepStage: Int, CaseIterable, Identifiable {
         }
     }
 
+    // Used when summing total sleep time so we do not accidentally count
+    // "In Bed" or "Awake" segments as actual sleep.
     var isAsleep: Bool {
         switch self {
         case .rem, .core, .deep, .asleepUnspecified: return true
@@ -44,6 +49,8 @@ enum SleepStage: Int, CaseIterable, Identifiable {
         }
     }
 
+    // Converts the raw HealthKit category value integer back to our enum.
+    // Returns nil for any value we do not recognise so callers can skip it safely.
     static func from(_ value: Int) -> SleepStage? {
         switch value {
         case HKCategoryValueSleepAnalysis.inBed.rawValue:              return .inBed
@@ -57,6 +64,7 @@ enum SleepStage: Int, CaseIterable, Identifiable {
     }
 }
 
+// A single continuous segment within a sleep session (for example, one block of REM).
 struct SleepInterval: Identifiable {
     let id = UUID()
     let stage: SleepStage
@@ -65,28 +73,33 @@ struct SleepInterval: Identifiable {
     var duration: TimeInterval { end.timeIntervalSince(start) }
 }
 
+// Groups all sleep intervals from a single night into one object and
+// exposes summary calculations that the sleep detail screen needs.
 struct SleepSession {
     let intervals: [SleepInterval]
     let sessionStart: Date
     let sessionEnd: Date
 
-    /// Total time asleep (REM + Core + Deep + asleepUnspecified), deduplicated.
+    // Total time actually asleep (excludes "In Bed" and "Awake" segments).
+    // Deduplication is applied because multiple sources like Apple Watch and iPhone
+    // can produce overlapping samples for the same period.
     var timeAsleep: TimeInterval {
         let asleep = intervals.filter { $0.stage.isAsleep }
         return SleepSession.mergedDuration(asleep)
     }
 
-    /// Total in-bed window, deduplicated.
+    // Total time from first to last sample, including time awake in bed.
     var timeInBed: TimeInterval {
         SleepSession.mergedDuration(intervals)
     }
 
-    /// Per-stage merged duration (deduped across overlapping samples).
+    // Duration for a specific stage after merging overlapping samples.
     func duration(for stage: SleepStage) -> TimeInterval {
         SleepSession.mergedDuration(intervals.filter { $0.stage == stage })
     }
 
-    /// Stage breakdown for asleep stages only — used for Apple Health-style summary.
+    // Used by the sleep breakdown chart to show how much time was spent
+    // in each meaningful stage (excludes "In Bed" to match Apple Health's display).
     var asleepBreakdown: [(stage: SleepStage, duration: TimeInterval)] {
         let stages: [SleepStage] = [.rem, .core, .deep, .asleepUnspecified]
         return stages.compactMap { s in
@@ -95,14 +108,17 @@ struct SleepSession {
         }
     }
 
+    // Merges overlapping intervals by sorting them and only counting time that
+    // has not already been counted by a previous segment. This prevents double-counting
+    // when both the iPhone and Apple Watch record the same sleep period.
     private static func mergedDuration(_ items: [SleepInterval]) -> TimeInterval {
         let sorted = items.sorted { $0.start < $1.start }
         var total: TimeInterval = 0
         var currentEnd = Date.distantPast
         for it in sorted {
-            let s = max(it.start, currentEnd)
-            if s < it.end {
-                total += it.end.timeIntervalSince(s)
+            let start = max(it.start, currentEnd)
+            if start < it.end {
+                total += it.end.timeIntervalSince(start)
                 currentEnd = max(currentEnd, it.end)
             }
         }
@@ -111,6 +127,9 @@ struct SleepSession {
 }
 
 // MARK: - HealthKitManager
+
+// Singleton that owns all communication with the HealthKit store.
+// ObservableObject lets SwiftUI views react automatically when latestSnapshot updates.
 final class HealthKitManager: ObservableObject {
     static let shared = HealthKitManager()
     private let store = HKHealthStore()
@@ -121,10 +140,14 @@ final class HealthKitManager: ObservableObject {
     private init() {}
 
     // MARK: - Types to read
+
+    // Builds the set of health data types the app needs to request permission for.
+    // Using a computed property rather than a stored constant avoids issues with
+    // initialisation order when the singleton is first created.
     private var readTypes: Set<HKObjectType> {
         var types = Set<HKObjectType>()
         let ids: [HKQuantityTypeIdentifier] = [
-            .heartRateVariabilitySDNN,
+            .heartRateVariabilitySDNN,  // HRV in milliseconds (SDNN method)
             .restingHeartRate,
             .activeEnergyBurned,
             .basalEnergyBurned,
@@ -139,7 +162,11 @@ final class HealthKitManager: ObservableObject {
         return types
     }
 
-    // MARK: - Request authorisation
+    // MARK: - Authorisation
+
+    // HealthKit requires permission to be requested each session on some iOS versions.
+    // The callback dispatches back to the main thread before updating isAuthorized
+    // because @Published properties must be set on the main thread.
     func requestAuthorization() {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         store.requestAuthorization(toShare: [], read: readTypes) { [weak self] granted, _ in
@@ -154,26 +181,33 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    // MARK: - Sync to SwiftData context
+    // MARK: - Sync to SwiftData
+
+    // Called when the app becomes active so that any check-in from today
+    // gets its biometric fields topped up with the latest HealthKit readings.
+    // We only update fields where HealthKit has a value, so manually entered
+    // data is never overwritten with nil.
     func syncToContext(_ context: ModelContext) {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         Task {
             let snapshot = await fetchTodayData()
             await MainActor.run {
                 self.latestSnapshot = snapshot
+
+                // Find today's check-in (if one exists) and patch in the HealthKit values.
                 let startOfDay = Calendar.current.startOfDay(for: Date())
                 let descriptor = FetchDescriptor<DailyCheckIn>(
                     predicate: #Predicate { $0.date >= startOfDay },
                     sortBy: [SortDescriptor(\.date, order: .reverse)]
                 )
                 if let existing = try? context.fetch(descriptor).first {
-                    if let v = snapshot.sleepHours     { existing.sleepHours     = v }
-                    if let v = snapshot.hrvMs          { existing.hrvMs          = v }
-                    if let v = snapshot.restingHR      { existing.restingHR      = v }
-                    if let v = snapshot.workoutLoad    { existing.workoutLoad    = v }
-                    if let v = snapshot.activeCalories { existing.activeCalories = v }
-                    if let v = snapshot.stepCount      { existing.stepCount      = v }
-                    if let v = snapshot.restingEnergy  { existing.restingEnergy  = v }
+                    if let v = snapshot.sleepHours      { existing.sleepHours      = v }
+                    if let v = snapshot.hrvMs           { existing.hrvMs           = v }
+                    if let v = snapshot.restingHR       { existing.restingHR       = v }
+                    if let v = snapshot.workoutLoad     { existing.workoutLoad     = v }
+                    if let v = snapshot.activeCalories  { existing.activeCalories  = v }
+                    if let v = snapshot.stepCount       { existing.stepCount       = v }
+                    if let v = snapshot.restingEnergy   { existing.restingEnergy   = v }
                     if let v = snapshot.exerciseMinutes { existing.exerciseMinutes = v }
                     try? context.save()
                 }
@@ -181,7 +215,11 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    // MARK: - Fetch all data types
+    // MARK: - Fetch today's data
+
+    // Fetches all data types in parallel using async let so each HKQuery
+    // runs concurrently rather than waiting for the previous one to finish.
+    // This cuts the total fetch time from the sum of all queries to the slowest one.
     func fetchTodayData() async -> HealthKitSnapshot {
         async let session  = fetchSleepSession()
         async let hrv      = fetchMostRecentQuantity(.heartRateVariabilitySDNN, unit: HKUnit(from: "ms"))
@@ -193,7 +231,12 @@ final class HealthKitManager: ObservableObject {
 
         let (sess, h, r, c, b, st, ex) = await (session, hrv, resting, calories, basal, steps, exercise)
 
+        // Convert active calories to a 1-10 workout load score.
+        // 60 kcal per point is a rough threshold: 600+ kcal = max effort session (10/10).
         let load: Double? = c.map { min(10, max(1, $0 / 60.0)) }
+
+        // Convert total sleep time from seconds to hours and discard zero values
+        // (a zero would mean no valid sleep samples were found, not that the user slept 0 hours).
         let sleepHours: Double? = sess.map { $0.timeAsleep / 3600 }.flatMap { $0 > 0 ? $0 : nil }
 
         return HealthKitSnapshot(
@@ -209,12 +252,15 @@ final class HealthKitManager: ObservableObject {
         )
     }
 
-    // MARK: - Sleep session (full stage breakdown, last 24h window)
+    // MARK: - Sleep session fetch
+
+    // Looks back 24 hours rather than just from midnight so overnight sessions
+    // that started before midnight are captured correctly.
+    // withCheckedContinuation bridges the callback-based HKSampleQuery API into
+    // Swift async/await so the caller can use it with async let.
     func fetchSleepSession(end: Date = Date()) async -> SleepSession? {
         guard let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else { return nil }
 
-        // Look back 24h from `end` to capture the most recent sleep period
-        // (overnight or daytime). Deduplication handles multi-source overlap.
         let start = Calendar.current.date(byAdding: .hour, value: -24, to: end)!
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
@@ -240,11 +286,15 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    // MARK: - Most recent quantity sample today
+    // MARK: - Quantity helpers
+
+    // Returns the most recent sample recorded today for point-in-time metrics like
+    // HRV and resting heart rate, where only the latest reading matters.
     private func fetchMostRecentQuantity(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {
         guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { return nil }
         let startOfDay = Calendar.current.startOfDay(for: Date())
         let predicate  = HKQuery.predicateForSamples(withStart: startOfDay, end: Date())
+        // Sort descending so the first result is the most recent sample.
         let sort       = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
 
         return await withCheckedContinuation { continuation in
@@ -258,7 +308,8 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    // MARK: - Cumulative sum for today
+    // Returns the total accumulated value for today for cumulative metrics like
+    // calories burned and step count, where we want the running total not just the last sample.
     private func fetchCumulativeSum(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {
         guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { return nil }
         let startOfDay = Calendar.current.startOfDay(for: Date())
