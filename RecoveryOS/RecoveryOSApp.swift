@@ -66,12 +66,21 @@ struct RecoveryOSApp: App {
         }
         .modelContainer(sharedModelContainer)
         .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+
             // HealthKit data is refreshed every time the app comes back to the
             // foreground so that the dashboard always shows today's latest readings
             // even if the app has been in the background for several hours.
-            if phase == .active,
-               UserDefaults.standard.bool(forKey: "healthKitEnabled") {
+            if UserDefaults.standard.bool(forKey: "healthKitEnabled") {
                 HealthKitManager.shared.requestAuthorization()
+            }
+
+            // Re-schedule the daily 8am check-in reminder on every foreground so
+            // it survives sign-out (which calls cancelAllNotifications) and device
+            // restarts (which clear pending notifications). The method removes the
+            // old request before adding a new one so there is never a duplicate.
+            if UserDefaults.standard.bool(forKey: "recoveryReminders") {
+                NotificationManager.shared.scheduleDailyCheckInReminder()
             }
         }
     }

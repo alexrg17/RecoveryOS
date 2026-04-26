@@ -114,6 +114,16 @@ struct SettingsView: View {
             .sheet(isPresented: $showHealthPermissionsSheet) {
                 healthPermissionsSheet
             }
+            // Schedule or cancel the daily 8am reminder whenever the toggle changes.
+            // Without this handler the AppStorage value updates but the notification
+            // queue is never touched, so the toggle would appear to work but do nothing.
+            .onChange(of: recoveryReminders) { _, enabled in
+                if enabled {
+                    NotificationManager.shared.scheduleDailyCheckInReminder()
+                } else {
+                    NotificationManager.shared.cancelDailyCheckInReminder()
+                }
+            }
         }
     }
 

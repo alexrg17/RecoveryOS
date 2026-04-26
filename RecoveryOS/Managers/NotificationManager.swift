@@ -107,8 +107,17 @@ final class NotificationManager {
         send(id: "demo-\(type.rawValue)", title: type.title, body: type.body, delay: 5)
     }
 
-    // MARK: - Cancel all
+    // MARK: - Cancel
 
+    // Removes only the daily 8am reminder, leaving any pending recovery alerts
+    // untouched. Called when the user turns off Recovery Reminders in Settings.
+    func cancelDailyCheckInReminder() {
+        UNUserNotificationCenter.current()
+            .removePendingNotificationRequests(withIdentifiers: ["daily-checkin"])
+    }
+
+    // Removes every pending notification. Used on sign-out so the next user
+    // does not see another account's recovery alerts.
     func cancelAllNotifications() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
