@@ -102,6 +102,7 @@ struct EditProfileView: View {
             profile.discipline = discipline
             profile.age        = Int(age)
             try? modelContext.save()
+            Task { try? await SupabaseService.shared.upsertProfile(profile) }
         }
         dismiss()
     }

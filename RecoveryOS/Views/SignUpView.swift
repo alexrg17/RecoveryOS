@@ -413,14 +413,20 @@ struct SignUpView: View {
                     password: password,
                     data: ["full_name": AnyJSON(fullName)]
                 )
+                let newProfile = UserProfile(name: fullName, email: email)
                 await MainActor.run {
                     isLoading    = false
                     spinnerAngle = 0
-                    let profile  = UserProfile(name: fullName, email: email)
-                    modelContext.insert(profile)
+                    // Remove any stale profiles from previous accounts before inserting
+                    let stale = (try? modelContext.fetch(FetchDescriptor<UserProfile>())) ?? []
+                    stale.forEach { modelContext.delete($0) }
+                    modelContext.insert(newProfile)
+                    try? modelContext.save()
                     isLoggedIn   = true
                     onAccountCreated()
                 }
+                // Persist skeleton profile to Supabase immediately
+                try? await SupabaseService.shared.upsertProfile(newProfile)
             } catch {
                 await MainActor.run {
                     isLoading    = false

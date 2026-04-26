@@ -56,6 +56,7 @@ struct BedtimeTargetView: View {
                             .tint(accentTeal)
                     }
                 }
+
             }
             .padding(16)
         }
@@ -66,13 +67,14 @@ struct BedtimeTargetView: View {
         .onChange(of: tempDate) { _, newValue in
             let comps = Calendar.current.dateComponents([.hour, .minute], from: newValue)
             bedtimeHour   = comps.hour ?? 22
-            bedtimeMinute = comps.minute ?? 0
+            bedtimeMinute = comps.minute ?? 30
         }
+        .onDisappear { Task { try? await SupabaseService.shared.syncAllPreferences() } }
     }
 
     private func makeDate(hour: Int, minute: Int) -> Date {
         var comps = DateComponents()
-        comps.hour = hour
+        comps.hour   = hour
         comps.minute = minute
         return Calendar.current.date(from: comps) ?? Date()
     }

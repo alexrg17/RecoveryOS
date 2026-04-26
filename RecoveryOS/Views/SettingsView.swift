@@ -32,9 +32,9 @@ struct SettingsView: View {
     @AppStorage("hydrationUnit")         private var hydrationUnit: String = "L"
     @AppStorage("trainingIntensityBias") private var trainingIntensityBias: String = "LIT"
 
-    // Toggles (UI only)
-    @State private var recoveryReminders = true
-    @State private var biometricUnlock   = true
+    // Toggles — backed by AppStorage so they survive view dismissal
+    @AppStorage("recoveryReminders") private var recoveryReminders = true
+    @AppStorage("biometricUnlock")   private var biometricUnlock   = true
     @State private var showHealthPermissionsSheet = false
 
     // Entrance animations

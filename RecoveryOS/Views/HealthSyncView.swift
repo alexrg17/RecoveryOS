@@ -393,6 +393,7 @@ struct HealthSyncView: View {
             profile.age                 = Int(age)
             profile.intensity           = intensity
             profile.onboardingCompleted = true
+            Task { try? await SupabaseService.shared.upsertProfile(profile) }
         }
         hasCompletedOnboarding = true
         NotificationManager.shared.requestPermission()

@@ -222,6 +222,7 @@ struct CheckInView: View {
         )
         modelContext.insert(checkIn)
         NotificationManager.shared.scheduleRecoveryAlertIfNeeded(score: score)
+        Task { try? await SupabaseService.shared.upsertCheckIn(checkIn) }
         dismiss()
     }
 }

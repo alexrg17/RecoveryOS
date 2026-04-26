@@ -86,8 +86,10 @@ struct TrainingGoalsView: View {
             if let profile {
                 profile.intensity = newValue == 1 ? 1.0 : 0.0
                 try? modelContext.save()
+                Task { try? await SupabaseService.shared.upsertProfile(profile) }
             }
         }
+        .onDisappear { Task { try? await SupabaseService.shared.syncAllPreferences() } }
     }
 
     // MARK: - UI helpers

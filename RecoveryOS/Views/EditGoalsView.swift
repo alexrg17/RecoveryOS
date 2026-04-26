@@ -221,6 +221,7 @@ struct EditGoalsView: View {
         p.hasUpcomingEvent    = hasUpcomingEvent
         p.upcomingEventDate   = hasUpcomingEvent ? upcomingEventDate : nil
         try? modelContext.save()
+        Task { try? await SupabaseService.shared.upsertProfile(p) }
         dismiss()
     }
 }
