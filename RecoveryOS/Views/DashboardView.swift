@@ -36,12 +36,24 @@ private enum TabItem: String, CaseIterable {
 }
 
 // MARK: - Dashboard
+
+// The root view after login. Hosts the tab bar and switches between content areas
+// using a ZStack rather than TabView so we can control the transition animations
+// and attach a horizontal swipe gesture to the whole screen.
 struct DashboardView: View {
     var onSignedOut: (() -> Void)? = nil
 
+    // Injected from RecoveryOSApp so the same controller instance is shared
+    // across every tab without needing to recreate it on each tab switch.
+    @EnvironmentObject private var dashboardController: DashboardController
     @EnvironmentObject private var healthKit: HealthKitManager
     @Environment(\.modelContext) private var modelContext
+
+    // Sorted newest first so checkIns.first always gives today's entry
+    // and checkIns[1] gives yesterday's for comparison calculations.
     @Query(sort: \DailyCheckIn.date, order: .reverse) private var checkIns: [DailyCheckIn]
+    @Query private var profiles: [UserProfile]
+
     @State private var selectedTab: TabItem = .home
     @State private var showCheckIn            = false
     @State private var showNotificationPicker = false
@@ -51,95 +63,15 @@ struct DashboardView: View {
     @State private var ringProgress: Double = 0
     @State private var displayedScore: Int  = 0
 
-    // MARK: - Computed data
-    private var latestCheckIn: DailyCheckIn? { checkIns.first }
+    // MARK: - Computed data (View reads Model, passes to Controller for interpretation)
+
+    private var latestCheckIn:   DailyCheckIn? { checkIns.first }
     private var previousCheckIn: DailyCheckIn? { checkIns.count > 1 ? checkIns[1] : nil }
+    private var recoveryScore:   Int           { latestCheckIn?.readinessScore ?? 0 }
 
     private var hasCheckedInToday: Bool {
         guard let latest = latestCheckIn else { return false }
         return Calendar.current.isDateInToday(latest.date)
-    }
-
-    private var recoveryScore: Int { latestCheckIn?.readinessScore ?? 0 }
-
-    private var recoveryStatus: String {
-        guard latestCheckIn != nil else { return "NO DATA" }
-        switch recoveryScore {
-        case 85...100: return "OPTIMAL"
-        case 75..<85:  return "GOOD"
-        case 60..<75:  return "MODERATE"
-        case 40..<60:  return "FAIR"
-        default:       return "POOR"
-        }
-    }
-
-    private var statusColor: Color {
-        switch recoveryScore {
-        case 85...100: return accentTeal
-        case 75..<85:  return Color(red: 0.4, green: 0.85, blue: 0.55)
-        case 60..<75:  return Color(red: 1.0, green: 0.75, blue: 0.2)
-        case 40..<60:  return Color(red: 1.0, green: 0.55, blue: 0.2)
-        default:       return Color(red: 1.0, green: 0.38, blue: 0.38)
-        }
-    }
-
-    private var sleepString: String {
-        guard let h = latestCheckIn?.sleepHours ?? healthKit.latestSnapshot.sleepHours else { return "—" }
-        let hrs = Int(h); let mins = Int((h - Double(hrs)) * 60)
-        return mins > 0 ? "\(hrs)h \(mins)m" : "\(hrs)h"
-    }
-
-    private var sleepChange: String? {
-        guard let today = latestCheckIn?.sleepHours,
-              let prev  = previousCheckIn?.sleepHours, prev > 0 else { return nil }
-        let pct = ((today - prev) / prev) * 100
-        return "\(pct >= 0 ? "+" : "")\(Int(pct.rounded()))%"
-    }
-
-    private var sleepChangeColor: Color {
-        guard let c = sleepChange else { return .clear }
-        return c.hasPrefix("+") ? Color(red: 0.2, green: 0.85, blue: 0.4) : Color(red: 1.0, green: 0.38, blue: 0.38)
-    }
-
-    private var hrvString: String {
-        guard let hrv = latestCheckIn?.hrvMs ?? healthKit.latestSnapshot.hrvMs else { return "—" }
-        return "\(Int(hrv)) ms"
-    }
-
-    private var hrvProgress: Double {
-        guard let hrv = latestCheckIn?.hrvMs ?? healthKit.latestSnapshot.hrvMs else { return 0 }
-        return min(hrv / 100.0, 1.0)
-    }
-
-    private var restingHRString: String {
-        guard let hr = latestCheckIn?.restingHR ?? healthKit.latestSnapshot.restingHR else { return "—" }
-        return "\(Int(hr)) BPM"
-    }
-
-    private var insight: (label: String, body: String) {
-        guard latestCheckIn != nil else {
-            return ("Complete your first check-in:", "Log your daily metrics to receive personalised recovery insights and training recommendations.")
-        }
-        switch recoveryScore {
-        case 85...100: return ("Optimal Performance Window:", "Your CNS recovery is at peak levels. High intensity training is recommended.")
-        case 75..<85:  return ("Good Recovery Status:", "Your body is well recovered. Moderate to high intensity training is appropriate today.")
-        case 60..<75:  return ("Moderate Recovery:", "Consider a moderate session today. Prioritise sleep and hydration to boost recovery.")
-        case 40..<60:  return ("Fair Recovery:", "Your body needs more rest. Light activity or active recovery is recommended today.")
-        default:       return ("Low Recovery Alert:", "Your recovery is compromised. Rest is strongly recommended. Avoid intense training today.")
-        }
-    }
-
-    private var nextPhase: (icon: String, iconBg: Color, title: String, subtitle: String) {
-        guard latestCheckIn != nil else {
-            return ("plus.circle", accentBlue, "Log Check-In", "Complete today's check-in first")
-        }
-        switch recoveryScore {
-        case 85...100: return ("figure.run",        accentBlue,                               "High Intensity",    "Suggested duration: 60 minutes")
-        case 75..<85:  return ("dumbbell.fill",      Color(red: 0.3, green: 0.45, blue: 0.9), "Strength Training", "Suggested duration: 45 minutes")
-        case 60..<75:  return ("figure.walk",        Color(red: 0.45, green: 0.35, blue: 0.22), "Light Training",  "Suggested duration: 30 minutes")
-        case 40..<60:  return ("figure.flexibility", accentTeal.opacity(0.9),                 "Active Recovery",   "Suggested duration: 30 minutes")
-        default:       return ("bed.double.fill",    Color(red: 0.35, green: 0.2, blue: 0.6), "Full Rest",         "Recommended for today")
-        }
     }
 
     // MARK: - Body
@@ -175,6 +107,13 @@ struct DashboardView: View {
             triggerAnimation()
             healthKit.syncToContext(modelContext)
         }
+        // Controller fetches AI advice whenever a new check-in is submitted
+        .task {
+            await dashboardController.refreshAdvice(profile: profiles.first, checkIns: checkIns)
+        }
+        .onChange(of: checkIns.first?.id) { _, _ in
+            Task { await dashboardController.refreshAdvice(profile: profiles.first, checkIns: checkIns) }
+        }
         .onChange(of: checkIns.first?.readinessScore) { _, _ in triggerAnimation() }
         .onChange(of: healthKit.isAuthorized) { _, granted in
             if granted { healthKit.syncToContext(modelContext) }
@@ -182,6 +121,11 @@ struct DashboardView: View {
     }
 
     // MARK: - Animation
+
+    // Animates the score ring filling up and the number counting from 0 to the target.
+    // The ring uses SwiftUI's built-in animation, but the number count-up is done
+    // manually with DispatchQueue because SwiftUI's contentTransition(.numericText())
+    // only transitions between two values, not across a range of intermediate steps.
     private func triggerAnimation() {
         let target = recoveryScore
         guard target > 0 else { return }
@@ -193,7 +137,8 @@ struct DashboardView: View {
             ringProgress = Double(target) / 100.0
         }
 
-        // Count-up effect: step score 35 times over 1.4s
+        // Step through 35 increments spread evenly across 1.4 seconds so the
+        // number appears to count up in sync with the ring filling animation.
         let steps = 35
         for i in 1...steps {
             let delay = 0.2 + 1.4 * Double(i) / Double(steps)
@@ -203,13 +148,18 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Swipe gesture (left/right to change tab)
+    // MARK: - Swipe gesture
+
+    // Lets the user switch tabs by swiping left or right anywhere on the screen,
+    // which is more natural than reaching down to tap the tab bar each time.
+    // The 1.5x ratio check ensures that a mostly vertical scroll does not
+    // accidentally trigger a tab change, and the 50pt minimum adds a threshold
+    // so small accidental movements are ignored.
     private var swipeTabGesture: some Gesture {
         DragGesture(minimumDistance: 30)
             .onEnded { value in
                 let h = value.translation.width
                 let v = value.translation.height
-                // Only act on primarily horizontal swipes
                 guard abs(h) > abs(v) * 1.5, abs(h) > 50 else { return }
                 let tabs = TabItem.allCases
                 guard let index = tabs.firstIndex(of: selectedTab) else { return }
@@ -351,18 +301,22 @@ struct DashboardView: View {
                     .foregroundStyle(.white)
                     .contentTransition(.numericText())
 
-                Text(recoveryStatus)
+                // Controller interprets the score into a human-readable status
+                Text(dashboardController.recoveryStatus(for: recoveryScore, hasData: latestCheckIn != nil))
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .kerning(2)
-                    .foregroundStyle(latestCheckIn != nil ? statusColor : labelGray)
+                    .foregroundStyle(latestCheckIn != nil ? dashboardController.statusColor(for: recoveryScore) : labelGray)
             }
         }
         .frame(width: 210, height: 210)
         .padding(.vertical, 8)
+        // Double tap replays the ring fill animation, useful for demo purposes
+        // or if the user wants to watch the score animate again.
         .onTapGesture(count: 2) {
             triggerAnimation()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         }
+        // Long press reveals share options without cluttering the main UI.
         .contextMenu {
             Button {
                 UIPasteboard.general.string = "\(recoveryScore)/100"
@@ -370,7 +324,7 @@ struct DashboardView: View {
                 Label("Copy Score", systemImage: "doc.on.doc")
             }
             Button {
-                UIPasteboard.general.string = "My RecoveryOS readiness score today: \(recoveryScore)/100 (\(recoveryStatus))"
+                UIPasteboard.general.string = "My RecoveryOS readiness score today: \(recoveryScore)/100 (\(dashboardController.recoveryStatus(for: recoveryScore, hasData: latestCheckIn != nil)))"
             } label: {
                 Label("Share Progress", systemImage: "square.and.arrow.up")
             }
@@ -378,34 +332,72 @@ struct DashboardView: View {
     }
 
     // MARK: AI insight card
+    // View reads display state from DashboardController (MVC)
     private var aiInsightCard: some View {
-        Group {
-            Text("\(insight.label) ")
-                .foregroundStyle(accentBlue)
-                .fontWeight(.semibold)
-            + Text(insight.body)
-                .foregroundStyle(.white)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: dashboardController.usedAI ? "sparkles" : "lightbulb.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(accentBlue)
+                Text(dashboardController.usedAI ? "AI COACH" : "RECOVERY INSIGHT")
+                    .font(.system(size: 10, weight: .semibold))
+                    .kerning(1.2)
+                    .foregroundStyle(Color.white.opacity(0.4))
+                Spacer()
+                if dashboardController.isGenerating {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .tint(accentBlue)
+                }
+            }
+            if dashboardController.isGenerating && dashboardController.aiAdvice.isEmpty {
+                Text("Generating your personalised advice...")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.white.opacity(0.35))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if !dashboardController.aiAdvice.isEmpty {
+                Text(dashboardController.aiAdvice)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white)
+                    .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                // Controller provides fallback insight text
+                let fallback = dashboardController.insightText(for: recoveryScore, hasData: latestCheckIn != nil)
+                Group {
+                    Text("\(fallback.label) ")
+                        .foregroundStyle(accentBlue)
+                        .fontWeight(.semibold)
+                    + Text(fallback.body)
+                        .foregroundStyle(.white)
+                }
+                .font(.system(size: 14))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .font(.system(size: 14))
-        .multilineTextAlignment(.leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(bgCard)
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: Metrics row
+    // Controller formats raw Model values into display strings
     private var metricsRow: some View {
-        HStack(spacing: 12) {
+        let change      = dashboardController.sleepChange(today: latestCheckIn, previous: previousCheckIn)
+        let changeColor = dashboardController.sleepChangeColor(for: change)
+        return HStack(spacing: 12) {
             metricCard(
                 icon: "moon.fill", iconColor: .white.opacity(0.7),
-                badge: sleepChange, badgeColor: sleepChangeColor,
-                label: "SLEEP QUALITY", value: sleepString, trendIcon: nil
+                badge: change, badgeColor: changeColor,
+                label: "SLEEP QUALITY",
+                value: dashboardController.sleepString(from: latestCheckIn, snapshot: healthKit.latestSnapshot),
+                trendIcon: nil
             )
             metricCard(
                 icon: "heart", iconColor: .white.opacity(0.7),
                 badge: nil, badgeColor: .clear,
-                label: "RESTING HR", value: restingHRString,
+                label: "RESTING HR",
+                value: dashboardController.restingHRString(from: latestCheckIn, snapshot: healthKit.latestSnapshot),
                 trendIcon: latestCheckIn != nil ? "arrow.down.right" : nil
             )
         }
@@ -445,7 +437,8 @@ struct DashboardView: View {
                 .foregroundStyle(labelGray)
 
             HStack(alignment: .bottom) {
-                Text(hrvString)
+                // Controller formats the HRV value from the Model
+                Text(dashboardController.hrvString(from: latestCheckIn, snapshot: healthKit.latestSnapshot))
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                 Spacer()
@@ -462,7 +455,7 @@ struct DashboardView: View {
                     RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.08)).frame(height: 6)
                     RoundedRectangle(cornerRadius: 4)
                         .fill(LinearGradient(colors: [accentBlue, accentTeal], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: geo.size.width * hrvProgress, height: 6)
+                        .frame(width: geo.size.width * dashboardController.hrvProgress(from: latestCheckIn, snapshot: healthKit.latestSnapshot), height: 6)
                 }
             }
             .frame(height: 6)
@@ -479,8 +472,10 @@ struct DashboardView: View {
     }
 
     // MARK: Next Phase card
+    // Controller determines the appropriate training phase from the readiness score
     private var nextPhaseCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let phase = dashboardController.nextPhase(for: recoveryScore, hasData: latestCheckIn != nil)
+        return VStack(alignment: .leading, spacing: 10) {
             Text("NEXT PHASE")
                 .font(.system(size: 10, weight: .semibold))
                 .kerning(1.5)
@@ -488,15 +483,15 @@ struct DashboardView: View {
 
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10).fill(nextPhase.iconBg).frame(width: 52, height: 52)
-                    Image(systemName: nextPhase.icon).font(.system(size: 24)).foregroundStyle(.white)
+                    RoundedRectangle(cornerRadius: 10).fill(phase.iconBg).frame(width: 52, height: 52)
+                    Image(systemName: phase.icon).font(.system(size: 24)).foregroundStyle(.white)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(nextPhase.title)
+                    Text(phase.title)
                         .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
-                    Text(nextPhase.subtitle)
+                    Text(phase.subtitle)
                         .font(.system(size: 13))
                         .foregroundStyle(labelGray)
                 }
@@ -540,5 +535,7 @@ struct DashboardView: View {
 
 #Preview {
     DashboardView()
-        .modelContainer(for: DailyCheckIn.self, inMemory: true)
+        .environmentObject(DashboardController())
+        .environmentObject(HealthKitManager.shared)
+        .modelContainer(for: [DailyCheckIn.self, UserProfile.self], inMemory: true)
 }
