@@ -95,5 +95,10 @@ final class CheckInController: ObservableObject {
         // Delegate notification scheduling so this controller does not need
         // to know anything about the UNUserNotificationCenter API.
         NotificationManager.shared.scheduleRecoveryAlertIfNeeded(score: score)
+
+        // Push the check-in to Supabase so it survives an app reinstall.
+        // Fire-and-forget — a local SwiftData copy already exists so a
+        // network failure here is non-fatal.
+        Task { try? await SupabaseService.shared.upsertCheckIn(checkIn) }
     }
 }
