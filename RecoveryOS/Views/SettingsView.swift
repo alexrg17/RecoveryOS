@@ -99,6 +99,7 @@ struct SettingsView: View {
                         connectedDevicesSection
                         privacySection
                         signOutButton
+                        sdgCard
                         versionFooter
                     }
                     .padding(.horizontal, 16)
@@ -477,6 +478,54 @@ struct SettingsView: View {
                     .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
         }
+    }
+
+    // MARK: - SDG card
+
+    // RecoveryOS contributes to UN Sustainable Development Goal 3 — Good Health
+    // and Well-Being — by helping athletes make data-driven recovery decisions,
+    // reducing injury risk and supporting long-term physical health.
+    private var sdgCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(red: 0.30, green: 0.62, blue: 0.22).opacity(0.18))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(red: 0.30, green: 0.62, blue: 0.22))
+                }
+
+                Text("UN Sustainable Development Goal")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                Text("SDG 3")
+                    .font(.system(size: 10, weight: .bold))
+                    .kerning(0.8)
+                    .foregroundColor(Color(red: 0.30, green: 0.62, blue: 0.22))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(red: 0.30, green: 0.62, blue: 0.22).opacity(0.15))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color(red: 0.30, green: 0.62, blue: 0.22).opacity(0.3), lineWidth: 1))
+            }
+
+            Text("RecoveryOS supports Good Health & Well-Being by helping athletes make smarter recovery decisions, reducing injury risk and improving long-term physical health.")
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.55))
+                .lineSpacing(3)
+        }
+        .padding(14)
+        .background(bgCard)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(red: 0.30, green: 0.62, blue: 0.22).opacity(0.22), lineWidth: 1)
+        )
     }
 
     // MARK: - Version footer
