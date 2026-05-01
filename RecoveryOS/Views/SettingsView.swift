@@ -8,12 +8,18 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import PhotosUI
 import Supabase
 
 // MARK: - SettingsView
 struct SettingsView: View {
 
     var onSignedOut: () -> Void
+
+    @EnvironmentObject private var profileImageManager: ProfileImageManager
+
+    // Tracks the item selected in PhotosPicker before it is decoded into a UIImage.
+    @State private var pickerItem: PhotosPickerItem? = nil
 
     @AppStorage("isLoggedIn")             private var isLoggedIn = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -99,13 +105,16 @@ struct SettingsView: View {
                         connectedDevicesSection
                         privacySection
                         signOutButton
+                        sdgCard
                         versionFooter
                     }
                     .padding(.horizontal, 16)
                     .opacity(sectionsOpacity)
                     .offset(y: sectionsSlide)
                 }
-                .padding(.bottom, 20)
+                // Extra bottom padding clears the tab bar (~50 pt) and the
+                // home indicator safe area (~34 pt on modern iPhones).
+                .padding(.bottom, 100)
             }
             .scrollContentBackground(.hidden)
             .background(bgPrimary)
@@ -277,26 +286,49 @@ struct SettingsView: View {
     // MARK: - Profile card
     private var profileCard: some View {
         VStack(spacing: 10) {
-            ZStack(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(Color(red: 0.18, green: 0.22, blue: 0.35))
+            // Wrapping the avatar in PhotosPicker makes the whole circle tappable.
+            // The pencil badge reinforces that it is editable without needing a label.
+            PhotosPicker(selection: $pickerItem, matching: .images, photoLibrary: .shared()) {
+                ZStack(alignment: .bottomTrailing) {
+                    // Show the saved photo if one exists, otherwise fall back to
+                    // the default person icon so the layout never looks broken.
+                    Group {
+                        if let img = profileImageManager.image {
+                            Image(uiImage: img)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 36))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    }
                     .frame(width: 80, height: 80)
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 36))
-                            .foregroundColor(.white.opacity(0.6))
-                    )
+                    .background(Color(red: 0.18, green: 0.22, blue: 0.35))
+                    .clipShape(Circle())
                     .shadow(color: accentBlue.opacity(0.3), radius: 10)
 
-                Circle()
-                    .fill(accentBlue)
-                    .frame(width: 24, height: 24)
-                    .overlay(
-                        Image(systemName: "pencil")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white)
-                    )
-                    .offset(x: 2, y: 2)
+                    Circle()
+                        .fill(accentBlue)
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: "pencil")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                        )
+                        .offset(x: 2, y: 2)
+                }
+            }
+            // Decode the picked item on a background thread, then hand the
+            // UIImage to the manager which saves it and publishes the update.
+            .onChange(of: pickerItem) { _, newItem in
+                Task {
+                    guard let newItem,
+                          let data  = try? await newItem.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data)
+                    else { return }
+                    await MainActor.run { profileImageManager.save(image) }
+                }
             }
 
             Text(profile?.name.isEmpty == false ? profile!.name : "Athlete")
@@ -479,6 +511,54 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - SDG card
+
+    // RecoveryOS contributes to UN Sustainable Development Goal 3 — Good Health
+    // and Well-Being — by helping athletes make data-driven recovery decisions,
+    // reducing injury risk and supporting long-term physical health.
+    private var sdgCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(red: 0.30, green: 0.62, blue: 0.22).opacity(0.18))
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(red: 0.30, green: 0.62, blue: 0.22))
+                }
+
+                Text("UN Sustainable Development Goal")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                Text("SDG 3")
+                    .font(.system(size: 10, weight: .bold))
+                    .kerning(0.8)
+                    .foregroundColor(Color(red: 0.30, green: 0.62, blue: 0.22))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(red: 0.30, green: 0.62, blue: 0.22).opacity(0.15))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color(red: 0.30, green: 0.62, blue: 0.22).opacity(0.3), lineWidth: 1))
+            }
+
+            Text("RecoveryOS supports Good Health & Well-Being by helping athletes make smarter recovery decisions, reducing injury risk and improving long-term physical health.")
+                .font(.system(size: 13))
+                .foregroundColor(.white.opacity(0.55))
+                .lineSpacing(3)
+        }
+        .padding(14)
+        .background(bgCard)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color(red: 0.30, green: 0.62, blue: 0.22).opacity(0.22), lineWidth: 1)
+        )
+    }
+
     // MARK: - Version footer
     private var versionFooter: some View {
         Text("RECOVERYOS V2.4.0")
@@ -609,4 +689,5 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView(onSignedOut: {})
+        .environmentObject(ProfileImageManager.shared)
 }

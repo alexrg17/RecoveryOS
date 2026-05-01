@@ -16,7 +16,8 @@ struct RecoveryOSApp: App {
     // one instance shared across all views. If we created it inside DashboardView
     // it would be destroyed and recreated every time the view appeared, which
     // would reset the AI advice cache and trigger unnecessary regeneration.
-    @StateObject private var dashboardController = DashboardController()
+    @StateObject private var dashboardController  = DashboardController()
+    @StateObject private var profileImageManager  = ProfileImageManager.shared
 
     // SwiftData requires a ModelContainer to be set up once and shared with
     // the whole view hierarchy via .modelContainer(). Building it as a stored
@@ -63,6 +64,7 @@ struct RecoveryOSApp: App {
                 // explicitly through every intermediate view.
                 .environmentObject(HealthKitManager.shared)
                 .environmentObject(dashboardController)
+                .environmentObject(profileImageManager)
         }
         .modelContainer(sharedModelContainer)
         .onChange(of: scenePhase) { _, phase in
