@@ -45,8 +45,9 @@ struct DashboardView: View {
 
     // Injected from RecoveryOSApp so the same controller instance is shared
     // across every tab without needing to recreate it on each tab switch.
-    @EnvironmentObject private var dashboardController: DashboardController
-    @EnvironmentObject private var healthKit: HealthKitManager
+    @EnvironmentObject private var dashboardController:  DashboardController
+    @EnvironmentObject private var healthKit:            HealthKitManager
+    @EnvironmentObject private var profileImageManager:  ProfileImageManager
     @Environment(\.modelContext) private var modelContext
 
     // Sorted newest first so checkIns.first always gives today's entry
@@ -195,14 +196,22 @@ struct DashboardView: View {
     private var topBar: some View {
         HStack {
             ZStack(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(Color(red: 0.2, green: 0.2, blue: 0.3))
-                    .frame(width: 44, height: 44)
-                    .overlay(
+                // Show the profile photo if one has been set, otherwise fall back
+                // to the default person icon so the layout is never empty.
+                Group {
+                    if let img = profileImageManager.image {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
                         Image(systemName: "person.fill")
                             .foregroundStyle(.white.opacity(0.7))
                             .font(.system(size: 20))
-                    )
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .background(Color(red: 0.2, green: 0.2, blue: 0.3))
+                .clipShape(Circle())
 
                 if latestCheckIn != nil {
                     ZStack {
@@ -537,5 +546,6 @@ struct DashboardView: View {
     DashboardView()
         .environmentObject(DashboardController())
         .environmentObject(HealthKitManager.shared)
+        .environmentObject(ProfileImageManager.shared)
         .modelContainer(for: [DailyCheckIn.self, UserProfile.self], inMemory: true)
 }

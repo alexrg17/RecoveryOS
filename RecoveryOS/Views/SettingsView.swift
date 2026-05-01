@@ -8,12 +8,18 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import PhotosUI
 import Supabase
 
 // MARK: - SettingsView
 struct SettingsView: View {
 
     var onSignedOut: () -> Void
+
+    @EnvironmentObject private var profileImageManager: ProfileImageManager
+
+    // Tracks the item selected in PhotosPicker before it is decoded into a UIImage.
+    @State private var pickerItem: PhotosPickerItem? = nil
 
     @AppStorage("isLoggedIn")             private var isLoggedIn = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -106,7 +112,9 @@ struct SettingsView: View {
                     .opacity(sectionsOpacity)
                     .offset(y: sectionsSlide)
                 }
-                .padding(.bottom, 20)
+                // Extra bottom padding clears the tab bar (~50 pt) and the
+                // home indicator safe area (~34 pt on modern iPhones).
+                .padding(.bottom, 100)
             }
             .scrollContentBackground(.hidden)
             .background(bgPrimary)
@@ -278,26 +286,49 @@ struct SettingsView: View {
     // MARK: - Profile card
     private var profileCard: some View {
         VStack(spacing: 10) {
-            ZStack(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(Color(red: 0.18, green: 0.22, blue: 0.35))
+            // Wrapping the avatar in PhotosPicker makes the whole circle tappable.
+            // The pencil badge reinforces that it is editable without needing a label.
+            PhotosPicker(selection: $pickerItem, matching: .images, photoLibrary: .shared()) {
+                ZStack(alignment: .bottomTrailing) {
+                    // Show the saved photo if one exists, otherwise fall back to
+                    // the default person icon so the layout never looks broken.
+                    Group {
+                        if let img = profileImageManager.image {
+                            Image(uiImage: img)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 36))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    }
                     .frame(width: 80, height: 80)
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 36))
-                            .foregroundColor(.white.opacity(0.6))
-                    )
+                    .background(Color(red: 0.18, green: 0.22, blue: 0.35))
+                    .clipShape(Circle())
                     .shadow(color: accentBlue.opacity(0.3), radius: 10)
 
-                Circle()
-                    .fill(accentBlue)
-                    .frame(width: 24, height: 24)
-                    .overlay(
-                        Image(systemName: "pencil")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white)
-                    )
-                    .offset(x: 2, y: 2)
+                    Circle()
+                        .fill(accentBlue)
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Image(systemName: "pencil")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                        )
+                        .offset(x: 2, y: 2)
+                }
+            }
+            // Decode the picked item on a background thread, then hand the
+            // UIImage to the manager which saves it and publishes the update.
+            .onChange(of: pickerItem) { _, newItem in
+                Task {
+                    guard let newItem,
+                          let data  = try? await newItem.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data)
+                    else { return }
+                    await MainActor.run { profileImageManager.save(image) }
+                }
             }
 
             Text(profile?.name.isEmpty == false ? profile!.name : "Athlete")
@@ -658,4 +689,5 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView(onSignedOut: {})
+        .environmentObject(ProfileImageManager.shared)
 }
