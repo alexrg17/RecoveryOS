@@ -141,7 +141,9 @@ struct EditGoalsView: View {
                 }
                 .padding(.top, 8)
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 100)
         }
         .background(bgPrimary.ignoresSafeArea())
         .navigationTitle("Edit Goals")
