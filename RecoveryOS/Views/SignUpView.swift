@@ -413,22 +413,42 @@ struct SignUpView: View {
                     password: password,
                     data: ["full_name": AnyJSON(fullName)]
                 )
+                let newProfile = UserProfile(name: fullName, email: email)
                 await MainActor.run {
                     isLoading    = false
                     spinnerAngle = 0
-                    let profile  = UserProfile(name: fullName, email: email)
-                    modelContext.insert(profile)
+                    // Remove any stale profiles from previous accounts before inserting
+                    let stale = (try? modelContext.fetch(FetchDescriptor<UserProfile>())) ?? []
+                    stale.forEach { modelContext.delete($0) }
+                    modelContext.insert(newProfile)
+                    try? modelContext.save()
                     isLoggedIn   = true
                     onAccountCreated()
                 }
+                // Persist skeleton profile to Supabase immediately
+                try? await SupabaseService.shared.upsertProfile(newProfile)
             } catch {
                 await MainActor.run {
                     isLoading    = false
                     spinnerAngle = 0
-                    triggerError(error.localizedDescription)
+                    triggerError(friendlyAuthError(error))
                 }
             }
         }
+    }
+
+    private func friendlyAuthError(_ error: Error) -> String {
+        let msg = error.localizedDescription.lowercased()
+        if msg.contains("already registered") || msg.contains("already exists") || msg.contains("user already") {
+            return "An account with this email already exists. Try signing in."
+        } else if msg.contains("password") && (msg.contains("weak") || msg.contains("short")) {
+            return "Password is too weak. Use at least 8 characters with numbers and uppercase."
+        } else if msg.contains("network") || msg.contains("connection") || msg.contains("offline") {
+            return "Connection error. Please check your internet."
+        } else if msg.contains("rate limit") || msg.contains("too many") {
+            return "Too many attempts. Please wait a moment and try again."
+        }
+        return "Sign up failed. Please try again."
     }
 
     private func triggerError(_ message: String) {

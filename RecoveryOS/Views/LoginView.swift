@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import Supabase
 
 struct LoginView: View {
@@ -14,6 +15,8 @@ struct LoginView: View {
     var onCreateAccount: () -> Void
 
     @AppStorage("isLoggedIn") private var isLoggedIn = false
+    @Environment(\.modelContext) private var modelContext
+    @Query private var profiles: [UserProfile]
 
     // Fields
     @State private var email           = ""
@@ -40,6 +43,11 @@ struct LoginView: View {
 
     // Spinner rotation
     @State private var spinnerAngle: Double  = 0
+
+    // Controls the forgot-password sheet. Presented as a sheet rather than a
+    // navigation push so the user can dismiss it without losing what they typed
+    // in the email field below.
+    @State private var showForgotPassword = false
 
     var body: some View {
         ZStack {
@@ -197,10 +205,11 @@ struct LoginView: View {
                         .padding(.horizontal, 24)
                         .offset(x: shakeOffset)
 
-                        // Forgot password
+                        // Forgot password — passes whatever is already in the email
+                        // field so the user does not have to type it again in the sheet.
                         HStack {
                             Spacer()
-                            Button("Forgot password?") {}
+                            Button("Forgot password?") { showForgotPassword = true }
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(Color(red: 0.4, green: 0.65, blue: 1.0))
                         }
@@ -321,6 +330,9 @@ struct LoginView: View {
             }
         }
         .onAppear { beginAnimations() }
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordView(prefillEmail: email)
+        }
     }
 
     // MARK: - Actions
@@ -346,10 +358,18 @@ struct LoginView: View {
 
         Task {
             do {
-                try await supabase.auth.signIn(email: email, password: password)
+                let session = try await supabase.auth.signIn(email: email, password: password)
                 await MainActor.run {
                     isLoading    = false
                     spinnerAngle = 0
+                    // Create a local profile if none exists (e.g. signed out and back in)
+                    if profiles.isEmpty {
+                        let meta     = session.user.userMetadata
+                        let name: String
+                        if case .string(let n) = meta["full_name"] { name = n } else { name = "" }
+                        let profile  = UserProfile(name: name, email: session.user.email ?? email)
+                        modelContext.insert(profile)
+                    }
                     isLoggedIn   = true
                     onSignedIn()
                 }
@@ -357,10 +377,26 @@ struct LoginView: View {
                 await MainActor.run {
                     isLoading    = false
                     spinnerAngle = 0
-                    triggerError(error.localizedDescription)
+                    triggerError(friendlyAuthError(error))
                 }
             }
         }
+    }
+
+    private func friendlyAuthError(_ error: Error) -> String {
+        let msg = error.localizedDescription.lowercased()
+        if msg.contains("email not confirmed") || msg.contains("not confirmed") {
+            return "Please confirm your email before signing in. Check your inbox."
+        } else if msg.contains("invalid login") || msg.contains("invalid credentials") || msg.contains("wrong password") {
+            return "Incorrect email or password."
+        } else if msg.contains("user not found") || msg.contains("no user") {
+            return "No account found with that email."
+        } else if msg.contains("network") || msg.contains("connection") || msg.contains("offline") {
+            return "Connection error. Please check your internet."
+        } else if msg.contains("rate limit") || msg.contains("too many") {
+            return "Too many attempts. Please wait a moment and try again."
+        }
+        return "Sign in failed. Please try again."
     }
 
     private func triggerError(_ message: String) {
@@ -396,6 +432,190 @@ struct LoginView: View {
 struct FieldLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.title
+    }
+}
+
+// MARK: - Forgot password sheet
+
+// Shown when the user taps "Forgot password?" on the login screen.
+// Calls Supabase's password reset API which emails a magic link — the user
+// does not need to be signed in for this to work, which is why it lives here
+// rather than in the Settings screen alongside ResetPasswordView.
+private struct ForgotPasswordView: View {
+
+    var prefillEmail: String
+
+    // Email is copied from the login field via prefillEmail so the user does
+    // not have to type it a second time.
+    @State private var email:         String
+    @State private var isLoading      = false
+    @State private var emailSent      = false
+    @State private var errorMessage   = ""
+    @State private var showError      = false
+
+    @Environment(\.dismiss) private var dismiss
+
+    private let bgPrimary  = Color(red: 0.04, green: 0.04, blue: 0.07)
+    private let bgCard     = Color(red: 0.09, green: 0.09, blue: 0.13)
+    private let accentBlue = Color(red: 0.28, green: 0.48, blue: 0.98)
+    private let accentTeal = Color(red: 0.25, green: 0.90, blue: 0.69)
+    private let labelGray  = Color.white.opacity(0.45)
+
+    init(prefillEmail: String) {
+        self.prefillEmail = prefillEmail
+        _email = State(initialValue: prefillEmail)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                bgPrimary.ignoresSafeArea()
+
+                VStack(spacing: 28) {
+
+                    // Icon
+                    Image(systemName: "lock.rotation")
+                        .font(.system(size: 48, weight: .light))
+                        .foregroundStyle(accentBlue)
+                        .padding(.top, 24)
+
+                    // Heading
+                    VStack(spacing: 8) {
+                        Text("Reset Password")
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text("Enter your email and we'll send you a reset link.")
+                            .font(.system(size: 14))
+                            .foregroundStyle(labelGray)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    if emailSent {
+                        // Success state — replace the form so the user cannot
+                        // accidentally tap "Send" a second time.
+                        VStack(spacing: 14) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 40))
+                                .foregroundStyle(accentTeal)
+                            Text("Check your inbox")
+                                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white)
+                            Text("A reset link has been sent to\n\(email)")
+                                .font(.system(size: 14))
+                                .foregroundStyle(labelGray)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(20)
+                        .background(bgCard)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                        )
+
+                    } else {
+                        // Email field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("EMAIL")
+                                .font(.system(size: 10, weight: .semibold))
+                                .kerning(1.5)
+                                .foregroundStyle(labelGray)
+                            TextField("your@email.com", text: $email)
+                                .keyboardType(.emailAddress)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                                .font(.system(size: 15))
+                                .foregroundStyle(.white)
+                                .padding(14)
+                                .background(Color(red: 0.1, green: 0.1, blue: 0.15))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                        }
+
+                        if showError {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.system(size: 12))
+                                Text(errorMessage)
+                                    .font(.system(size: 12))
+                            }
+                            .foregroundStyle(Color(red: 1.0, green: 0.38, blue: 0.38))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        }
+
+                        // Send button
+                        Button(action: sendResetEmail) {
+                            ZStack {
+                                LinearGradient(
+                                    colors: [accentBlue, accentTeal],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                                if isLoading {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Text("Send Reset Link")
+                                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .shadow(color: accentBlue.opacity(0.4), radius: 14, y: 4)
+                        }
+                        .disabled(isLoading)
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(labelGray)
+                }
+            }
+            .toolbarBackground(bgPrimary, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+    }
+
+    // Calls the Supabase password reset API. On success, Supabase sends an email
+    // containing a magic link that lets the user set a new password from a browser.
+    // No auth session is required for this call — it only needs the email address.
+    private func sendResetEmail() {
+        guard !email.isEmpty, email.contains("@") else {
+            errorMessage = "Please enter a valid email address."
+            withAnimation { showError = true }
+            return
+        }
+
+        isLoading  = true
+        showError  = false
+
+        Task {
+            do {
+                try await supabase.auth.resetPasswordForEmail(email)
+                await MainActor.run {
+                    isLoading = false
+                    withAnimation { emailSent = true }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading     = false
+                    errorMessage  = "Could not send reset email. Please try again."
+                    withAnimation { showError = true }
+                }
+            }
+        }
     }
 }
 

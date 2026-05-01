@@ -301,7 +301,7 @@ struct OnboardingView: View {
                         .font(.system(size: 9, weight: .bold))
                         .kerning(1)
                         .foregroundColor(accentTeal)
-                    Text("2h 14m")
+                    Text("Analyzed")
                         .font(.system(size: 18, weight: .black, design: .rounded))
                         .foregroundColor(.white)
                 }
@@ -347,8 +347,8 @@ struct OnboardingView: View {
 
             // Stat cards
             HStack(spacing: 12) {
-                statCard(label: "READY SCORE", value: "92%")
-                statCard(label: "HRV BALANCE", value: "Optimal")
+                statCard(label: "READY SCORE", value: "Real-time")
+                statCard(label: "HRV BALANCE", value: "Adaptive")
             }
             .padding(.horizontal, 4)
         }

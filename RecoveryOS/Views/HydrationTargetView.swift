@@ -2,8 +2,8 @@ import SwiftUI
 
 struct HydrationTargetView: View {
     @AppStorage("hydrationTargetLiters") private var targetLiters: Double = 2.5
-    @AppStorage("hydrationUnit")        private var unit: String = "L" // or "fl oz"
-    @AppStorage("hydrationReminder")    private var hydrationReminder: Bool = false
+    @AppStorage("hydrationUnit")         private var unit: String = "L"
+    @AppStorage("hydrationReminder")     private var hydrationReminder: Bool = false
 
     private let bgPrimary  = Color(red: 0.04, green: 0.04, blue: 0.07)
     private let bgCard     = Color(red: 0.09, green: 0.09, blue: 0.13)
@@ -45,7 +45,7 @@ struct HydrationTargetView: View {
                         }
                         Slider(value: Binding(
                             get: { targetLiters },
-                            set: { targetLiters = round($0 * 4) / 4 } // step 0.25
+                            set: { targetLiters = round($0 * 4) / 4 }
                         ), in: 1.0...5.0)
                         .tint(accentTeal)
                     }
@@ -59,12 +59,14 @@ struct HydrationTargetView: View {
                         }
                     }
                 }
+
             }
             .padding(16)
         }
         .background(bgPrimary.ignoresSafeArea())
         .navigationTitle("Hydration Target")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { Task { try? await SupabaseService.shared.syncAllPreferences() } }
     }
 
     private var formattedTarget: String {

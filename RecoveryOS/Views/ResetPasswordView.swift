@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 struct ResetPasswordView: View {
     private let bgPrimary  = Color(red: 0.04, green: 0.04, blue: 0.07)
@@ -9,6 +10,10 @@ struct ResetPasswordView: View {
     @State private var currentPassword: String = ""
     @State private var newPassword: String = ""
     @State private var confirmPassword: String = ""
+    @State private var isLoading = false
+    @State private var showError = false
+    @State private var errorMessage = ""
+    @State private var showSuccess = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -48,15 +53,45 @@ struct ResetPasswordView: View {
                     }
                 }
 
-                Button(action: { saveAndClose() }) {
-                    Text("Save Password")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(accentBlue)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                if showError {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                        Text(errorMessage)
+                    }
+                    .font(.system(size: 13))
+                    .foregroundColor(Color(red: 1.0, green: 0.38, blue: 0.38))
+                    .padding(.top, 4)
+                    .transition(.opacity)
                 }
+
+                if showSuccess {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Password updated successfully")
+                    }
+                    .font(.system(size: 13))
+                    .foregroundColor(Color(red: 0.25, green: 0.90, blue: 0.69))
+                    .padding(.top, 4)
+                    .transition(.opacity)
+                }
+
+                Button(action: saveAndClose) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(accentBlue)
+                        if isLoading {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Save Password")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                }
+                .disabled(isLoading)
                 .padding(.top, 8)
             }
             .padding(16)
@@ -93,8 +128,47 @@ struct ResetPasswordView: View {
     }
 
     private func saveAndClose() {
-        // Validate and save password, then dismiss
-        dismiss()
+        guard !newPassword.isEmpty else {
+            showError(message: "Please enter a new password.")
+            return
+        }
+        guard newPassword.count >= 8 else {
+            showError(message: "Password must be at least 8 characters.")
+            return
+        }
+        guard newPassword == confirmPassword else {
+            showError(message: "Passwords do not match.")
+            return
+        }
+
+        isLoading = true
+        showError = false
+        showSuccess = false
+
+        Task {
+            do {
+                try await supabase.auth.update(user: UserAttributes(password: newPassword))
+                await MainActor.run {
+                    isLoading = false
+                    withAnimation { showSuccess = true }
+                    // Clear fields and dismiss after a short delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { dismiss() }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    showError(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func showError(message: String) {
+        errorMessage = message
+        withAnimation { showError = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            withAnimation { showError = false }
+        }
     }
 }
 
